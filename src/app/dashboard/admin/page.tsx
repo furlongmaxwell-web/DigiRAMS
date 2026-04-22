@@ -135,13 +135,13 @@ export default function AdminDashboardPage() {
     stats.totalEntries > 0 ? 100 - resolvedPct - pendingPct : 0;
 
   return (
-    <div className="flex h-[calc(100vh-57px)] overflow-hidden -m-6">
+    <div className="flex h-[calc(100vh-57px-3rem)] overflow-hidden -m-6">
       {/* Main content: 3-card grid */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-hidden p-6">
         <div className="grid h-full grid-cols-3 gap-5">
           {/* Card 1: Severity Overview */}
-          <div className="flex flex-col rounded-[1.5rem] border-2 border-primary/60 bg-card overflow-hidden">
-            <div className="bg-primary px-6 py-5">
+          <div className="flex flex-col rounded-[1.5rem] border-2 border-primary/60 bg-card overflow-hidden min-h-0">
+            <div className="bg-primary px-6 py-5 shrink-0">
               <div className="flex items-center gap-3">
                 <ShieldAlert className="size-6 text-foreground" />
                 <h2 className="text-xl font-extrabold text-foreground">
@@ -149,7 +149,7 @@ export default function AdminDashboardPage() {
                 </h2>
               </div>
             </div>
-            <div className="flex-1 p-6 flex flex-col gap-5">
+            <div className="flex-1 p-6 flex flex-col gap-5 overflow-y-auto">
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-xl bg-muted/50 p-4 text-center">
                   <p className="text-3xl font-black tabular-nums text-foreground">
@@ -200,8 +200,8 @@ export default function AdminDashboardPage() {
           </div>
 
           {/* Card 2: Analytics Hub */}
-          <div className="flex flex-col rounded-[1.5rem] border-2 border-cyan-800/60 bg-card overflow-hidden">
-            <div className="bg-cyan-800 px-6 py-5">
+          <div className="flex flex-col rounded-[1.5rem] border-2 border-cyan-800/60 bg-card overflow-hidden min-h-0">
+            <div className="bg-cyan-800 px-6 py-5 shrink-0">
               <div className="flex items-center gap-3">
                 <Activity className="size-6 text-foreground" />
                 <h2 className="text-xl font-extrabold text-foreground">
@@ -209,7 +209,7 @@ export default function AdminDashboardPage() {
                 </h2>
               </div>
             </div>
-            <div className="flex-1 p-6 px-4 pt-0 flex flex-col gap-5">
+            <div className="flex-1 p-6 px-4 pt-0 flex flex-col gap-5 overflow-y-auto">
               {/* Status donut-style bars */}
               <div className="rounded-xl bg-muted/30 p-4 space-y-4">
                 <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-muted-foreground">
@@ -314,8 +314,8 @@ export default function AdminDashboardPage() {
           </div>
 
           {/* Card 3: Team & Performance */}
-          <div className="flex flex-col rounded-[1.5rem] border-2 border-emerald-500/40 bg-card overflow-hidden">
-            <div className="bg-emerald-500 px-6 py-5">
+          <div className="flex flex-col rounded-[1.5rem] border-2 border-emerald-500/40 bg-card overflow-hidden min-h-0">
+            <div className="bg-emerald-500 px-6 py-5 shrink-0">
               <div className="flex items-center gap-3">
                 <Users className="size-6 text-white" />
                 <h2 className="text-xl font-extrabold text-white">
@@ -323,7 +323,7 @@ export default function AdminDashboardPage() {
                 </h2>
               </div>
             </div>
-            <div className="flex-1 p-6 flex flex-col gap-5">
+            <div className="flex-1 p-6 flex flex-col gap-5 overflow-y-auto">
               {/* Quick metric cards */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-xl bg-muted/50 p-4 text-center">

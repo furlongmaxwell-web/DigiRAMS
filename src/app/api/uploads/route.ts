@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { parseCSV } from "@/lib/csv-parser";
+import { parseSpreadsheet } from "@/lib/spreadsheet-parser";
 import { analyzeUpload } from "@/lib/ai-analyzer";
 
 export async function GET() {
@@ -10,7 +10,7 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const isAdmin = session.user.role === "ADMIN";
+  const isAdmin = session.user.role?.toUpperCase() === "ADMIN";
   const uploads = await prisma.upload.findMany({
     where: isAdmin ? {} : { uploadedBy: session.user.id },
     include: { user: { select: { name: true } } },
@@ -53,12 +53,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const fileContent = await file.text();
-    const { headers, rows } = parseCSV(fileContent);
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    if (!ext || !["csv", "xlsx", "xls"].includes(ext)) {
+      return NextResponse.json(
+        { error: "Unsupported file type. Please upload a .csv or .xlsx file." },
+        { status: 400 }
+      );
+    }
+
+    const buffer = await file.arrayBuffer();
+    const text = ext === "csv" ? new TextDecoder().decode(buffer) : "";
+    const { headers, rows } = parseSpreadsheet({
+      name: file.name,
+      buffer,
+      text,
+    });
 
     if (rows.length === 0) {
       return NextResponse.json(
-        { error: "CSV file is empty or could not be parsed" },
+        { error: "File is empty or could not be parsed" },
         { status: 400 }
       );
     }

@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const isAdmin = session.user.role === "ADMIN";
+  const isAdmin = session.user.role?.toUpperCase() === "ADMIN";
   const scopeParam = req.nextUrl.searchParams.get("scope");
   const filterByUser = scopeParam === "me" || !isAdmin;
   const userId = filterByUser ? session.user.id : undefined;

@@ -117,6 +117,10 @@
   --sidebar-ring: oklch(0.65 0.22 264);
 }
 
+button {
+  cursor: pointer;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -130,7 +134,12 @@
   html {
     @apply font-sans scroll-smooth;
   }
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     @apply tracking-tight text-foreground font-heading;
     text-wrap: balance;
   }

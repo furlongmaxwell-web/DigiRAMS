@@ -105,7 +105,7 @@ export function VolunteerDashboard({ userName }: Props) {
   const resolvedPct = stats.totalEntries > 0 ? Math.round((stats.resolvedCount / stats.totalEntries) * 100) : 0
 
   return (
-    <div className="flex h-[calc(100vh-57px)] overflow-hidden -m-6">
+    <div className="flex min-h-[calc(100vh-57px-3rem)] -m-6">
       {/* Main content: 3-card grid */}
       <div className="flex-1 overflow-y-auto p-6">
         <div className="mb-6">

@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import Papa from "papaparse";
+import * as XLSX from "xlsx";
 
 interface FilePreview {
   rowCount: number;
@@ -36,7 +37,7 @@ export default function NewUploadPage() {
   const [dragging, setDragging] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const parsePreview = useCallback((f: File) => {
+  const parseCsvPreview = useCallback((f: File) => {
     Papa.parse(f, {
       header: true,
       preview: 5,
@@ -67,16 +68,44 @@ export default function NewUploadPage() {
     });
   }, []);
 
+  const parseXlsxPreview = useCallback((f: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: "array" });
+        const sheetName = workbook.SheetNames[0];
+        if (!sheetName) {
+          setPreview(null);
+          return;
+        }
+        const sheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+          defval: "",
+        });
+        const columns = rows.length > 0 ? Object.keys(rows[0]).slice(0, 3) : [];
+        setPreview({ rowCount: rows.length, columns });
+      } catch {
+        setPreview(null);
+        toast.error("Could not parse this file. Is it a valid Excel file?");
+      }
+    };
+    reader.readAsArrayBuffer(f);
+  }, []);
+
   const handleFileSelect = useCallback(
     (f: File | undefined) => {
       if (!f) return;
       setFile(f);
       setPreview(null);
-      if (f.name.endsWith(".csv")) {
-        parsePreview(f);
+      const ext = f.name.split(".").pop()?.toLowerCase();
+      if (ext === "csv") {
+        parseCsvPreview(f);
+      } else if (ext === "xlsx" || ext === "xls") {
+        parseXlsxPreview(f);
       }
     },
-    [parsePreview]
+    [parseCsvPreview, parseXlsxPreview],
   );
 
   const onDrop = useCallback(
@@ -182,7 +211,7 @@ export default function NewUploadPage() {
                 />
                 <div>
                   <p className="font-medium text-sm">
-                    Drag &amp; drop your CSV file
+                    Drag &amp; drop your file here
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     or click to browse
@@ -194,7 +223,7 @@ export default function NewUploadPage() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".csv,.xlsx"
+                  accept=".csv,.xlsx,.xls"
                   className="hidden"
                   onChange={(e) => handleFileSelect(e.target.files?.[0])}
                 />
