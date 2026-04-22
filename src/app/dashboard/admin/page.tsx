@@ -1,376 +1,476 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
+import { Skeleton } from "@/components/ui/skeleton";
 import {
+  Activity,
+  ChevronRight,
   FileSpreadsheet,
-  Database,
-  AlertTriangle,
+  ShieldAlert,
   Users,
-} from "lucide-react"
-import {
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-  Legend,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  AreaChart,
-  Area,
-  RadarChart,
-  Radar,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-} from "recharts"
+} from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableHead,
-  TableRow,
-  TableCell,
-} from "@/components/ui/table"
-import { DashboardSkeleton } from "@/components/skeletons/dashboard-skeleton"
+interface UploadItem {
+  id: string;
+  title: string;
+  totalEntries: number;
+  criticalCount: number;
+  avgSeverity: number | null;
+  aiSummary: string | null;
+  status: string;
+  createdAt: string;
+  uploadedByName: string;
+}
 
 interface Stats {
-  totalUploads: number
-  totalEntries: number
-  totalVolunteers: number
-  criticalCount: number
-  resolvedCount: number
-  pendingCount: number
-  noActionCount: number
-  severityDistribution: { level: number; label: string; count: number }[]
-  regionData: { name: string; count: number }[]
-  tagData: { name: string; count: number }[]
-  uploadsTimeline: { date: string; entries: number; title: string }[]
-  recentUploads: {
-    id: string
-    title: string
-    totalEntries: number
-    criticalCount: number
-    avgSeverity: number | null
-    status: string
-    createdAt: string
-  }[]
+  totalUploads: number;
+  totalEntries: number;
+  totalVolunteers: number;
+  criticalCount: number;
+  resolvedCount: number;
+  pendingCount: number;
+  noActionCount: number;
+  severityDistribution: { level: number; label: string; count: number }[];
+  regionData: { name: string; count: number }[];
+  tagData: { name: string; count: number }[];
+  uploads: UploadItem[];
 }
 
-const SEVERITY_COLORS: Record<number, string> = {
-  1: "#22c55e",
-  2: "#84cc16",
-  3: "#eab308",
-  4: "#f97316",
-  5: "#ef4444",
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  return `${Math.floor(days / 30)}mo ago`;
 }
 
-const TOOLTIP_STYLE: React.CSSProperties = {
-  borderRadius: "0.5rem",
-  border: "1px solid hsl(var(--border))",
-  backgroundColor: "hsl(var(--card))",
-  color: "hsl(var(--card-foreground))",
-  boxShadow: "0 4px 12px rgb(0 0 0 / .15)",
+function severityColor(level: number): string {
+  return (
+    [
+      "bg-emerald-500",
+      "bg-lime-500",
+      "bg-amber-500",
+      "bg-orange-500",
+      "bg-red-500",
+    ][level - 1] ?? "bg-muted"
+  );
 }
 
-function statusVariant(status: string) {
-  switch (status) {
-    case "done":
-      return "default" as const
-    case "analyzing":
-      return "secondary" as const
-    case "failed":
-      return "destructive" as const
-    default:
-      return "outline" as const
-  }
+function severityBadge(avg: number | null): { text: string; cls: string } {
+  if (avg === null)
+    return { text: "N/A", cls: "bg-muted text-muted-foreground" };
+  if (avg >= 4)
+    return {
+      text: "Critical",
+      cls: "bg-red-500/15 text-red-500 border border-red-500/25",
+    };
+  if (avg >= 3)
+    return {
+      text: "High",
+      cls: "bg-orange-500/15 text-orange-500 border border-orange-500/25",
+    };
+  if (avg >= 2)
+    return {
+      text: "Medium",
+      cls: "bg-amber-500/15 text-amber-500 border border-amber-500/25",
+    };
+  return {
+    text: "Low",
+    cls: "bg-emerald-500/15 text-emerald-500 border border-emerald-500/25",
+  };
 }
 
-function statusColor(status: string) {
-  switch (status) {
-    case "done":
-      return "bg-green-500/15 text-green-700 dark:text-green-400"
-    case "analyzing":
-      return "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400"
-    case "failed":
-      return "bg-red-500/15 text-red-700 dark:text-red-400"
-    default:
-      return ""
-  }
+function DashboardSkeleton() {
+  return (
+    <div className="flex h-full gap-0">
+      <div className="flex-1 grid grid-cols-3 gap-6 p-6">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} className="h-full min-h-[400px] rounded-2xl" />
+        ))}
+      </div>
+      <div className="w-80 space-y-4 border-l border-border p-6">
+        <Skeleton className="h-6 w-32" />
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-24 rounded-2xl" />
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export default function AdminDashboardPage() {
-  const [stats, setStats] = useState<Stats | null>(null)
-  const [loading, setLoading] = useState(true)
+  const router = useRouter();
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch("/api/stats")
       .then((res) => res.json())
       .then((data: Stats) => {
-        setStats(data)
-        setLoading(false)
+        setStats(data);
+        setLoading(false);
       })
-      .catch(() => setLoading(false))
-  }, [])
+      .catch(() => setLoading(false));
+  }, []);
 
-  if (loading || !stats) {
-    return <DashboardSkeleton />
-  }
+  if (loading || !stats) return <DashboardSkeleton />;
 
-  const statCards = [
-    {
-      label: "Total Uploads",
-      value: stats.totalUploads,
-      icon: FileSpreadsheet,
-      color: "text-blue-600 dark:text-blue-400",
-      bg: "bg-blue-100 dark:bg-blue-950/30",
-    },
-    {
-      label: "Total Entries",
-      value: stats.totalEntries,
-      icon: Database,
-      color: "text-indigo-600 dark:text-indigo-400",
-      bg: "bg-indigo-100 dark:bg-indigo-950/30",
-    },
-    {
-      label: "Critical Cases",
-      value: stats.criticalCount,
-      icon: AlertTriangle,
-      color: "text-red-600 dark:text-red-400",
-      bg: "bg-red-100 dark:bg-red-950/30",
-    },
-    {
-      label: "Volunteers",
-      value: stats.totalVolunteers,
-      icon: Users,
-      color: "text-emerald-600 dark:text-emerald-400",
-      bg: "bg-emerald-100 dark:bg-emerald-950/30",
-    },
-  ]
-
-  const axisTickStyle = { fontSize: 12, fill: "hsl(var(--muted-foreground))" }
-  const gridStroke = "hsl(var(--border))"
+  const maxSeverity = Math.max(
+    ...stats.severityDistribution.map((s) => s.count),
+    1,
+  );
+  const resolvedPct =
+    stats.totalEntries > 0
+      ? Math.round((stats.resolvedCount / stats.totalEntries) * 100)
+      : 0;
+  const pendingPct =
+    stats.totalEntries > 0
+      ? Math.round((stats.pendingCount / stats.totalEntries) * 100)
+      : 0;
+  const noActionPct =
+    stats.totalEntries > 0 ? 100 - resolvedPct - pendingPct : 0;
 
   return (
-    <div className="space-y-6">
-      {/* Row 1 — Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {statCards.map((card) => (
-          <Card key={card.label} className="border border-border bg-card shadow-sm shadow-black/5 hover:shadow-md hover:border-border/80 transition-all duration-200 group">
-            <CardHeader className="flex flex-row items-center justify-between pb-1">
-              <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                {card.label}
-              </CardTitle>
-              <div className={`rounded-lg p-2.5 ${card.bg} transition-transform duration-200 group-hover:scale-110`}>
-                <card.icon className={`h-4 w-4 ${card.color}`} />
+    <div className="flex h-[calc(100vh-57px)] overflow-hidden -m-6">
+      {/* Main content: 3-card grid */}
+      <div className="flex-1 overflow-y-auto p-6">
+        <div className="grid h-full grid-cols-3 gap-5">
+          {/* Card 1: Severity Overview */}
+          <div className="flex flex-col rounded-[1.5rem] border-2 border-primary/60 bg-card overflow-hidden">
+            <div className="bg-primary px-6 py-5">
+              <div className="flex items-center gap-3">
+                <ShieldAlert className="size-6 text-foreground" />
+                <h2 className="text-xl font-extrabold text-foreground">
+                  Severity Overview
+                </h2>
               </div>
-            </CardHeader>
-            <CardContent>
-              <p className={`text-3xl font-extrabold tracking-tight tabular-nums ${card.label === "Critical Cases" ? "text-red-600 dark:text-red-400" : ""}`}>
-                {card.value.toLocaleString()}
-              </p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Row 2 — Severity Distribution & Entries by Region */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card className="border border-border bg-card shadow-sm shadow-black/5 hover:shadow-md transition-shadow duration-200">
-          <CardHeader className="border-b border-border">
-            <CardTitle className="text-base font-semibold">Severity Distribution</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={stats.severityDistribution}
-                    dataKey="count"
-                    nameKey="label"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={100}
-                    innerRadius={55}
-                    paddingAngle={3}
-                    cornerRadius={4}
-                  >
-                    {stats.severityDistribution.map((entry) => (
-                      <Cell
-                        key={entry.level}
-                        fill={SEVERITY_COLORS[entry.level] ?? "#a3a3a3"}
-                      />
-                    ))}
-                  </Pie>
-                  <Tooltip contentStyle={TOOLTIP_STYLE} />
-                  <Legend
-                    verticalAlign="bottom"
-                    height={36}
-                    formatter={(value: string) => (
-                      <span className="text-foreground text-sm">{value}</span>
-                    )}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
             </div>
-          </CardContent>
-        </Card>
+            <div className="flex-1 p-6 flex flex-col gap-5">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl bg-muted/50 p-4 text-center">
+                  <p className="text-3xl font-black tabular-nums text-foreground">
+                    {stats.totalEntries.toLocaleString()}
+                  </p>
+                  <p className="text-[11px] font-semibold text-muted-foreground mt-1 uppercase tracking-wider">
+                    Total Entries
+                  </p>
+                </div>
+                <div className="rounded-xl bg-red-500/10 p-4 text-center">
+                  <p className="text-3xl font-black tabular-nums text-red-500">
+                    {stats.criticalCount.toLocaleString()}
+                  </p>
+                  <p className="text-[11px] font-semibold text-muted-foreground mt-1 uppercase tracking-wider">
+                    Critical
+                  </p>
+                </div>
+              </div>
 
-        <Card className="border border-border bg-card shadow-sm shadow-black/5 hover:shadow-md transition-shadow duration-200">
-          <CardHeader className="border-b border-border">
-            <CardTitle className="text-base font-semibold">Entries by Region</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={stats.regionData.slice(0, 8)}
-                  layout="vertical"
-                  margin={{ left: 20 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={gridStroke} />
-                  <XAxis type="number" tick={axisTickStyle} />
-                  <YAxis
-                    type="category"
-                    dataKey="name"
-                    width={100}
-                    tick={axisTickStyle}
-                  />
-                  <Tooltip contentStyle={TOOLTIP_STYLE} />
-                  <Bar
-                    dataKey="count"
-                    fill="#6366f1"
-                    radius={[0, 4, 4, 0]}
-                    barSize={18}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
+              <div className="flex-1 space-y-3">
+                <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-muted-foreground">
+                  Distribution
+                </p>
+                {stats.severityDistribution.map((s) => {
+                  const pct =
+                    maxSeverity > 0 ? (s.count / maxSeverity) * 100 : 0;
+                  return (
+                    <div key={s.level} className="group">
+                      <div className="flex items-center justify-between text-[12px] mb-1.5">
+                        <span className="font-semibold text-foreground">
+                          {s.label}
+                        </span>
+                        <span className="font-bold tabular-nums text-muted-foreground">
+                          {s.count}
+                        </span>
+                      </div>
+                      <div className="h-2.5 rounded-full bg-muted/60 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-700 ${severityColor(s.level)}`}
+                          style={{ width: `${Math.max(pct, 2)}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Row 3 — Uploads Timeline & Needs Overview */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card className="border border-border bg-card shadow-sm shadow-black/5 hover:shadow-md transition-shadow duration-200">
-          <CardHeader className="border-b border-border">
-            <CardTitle className="text-base font-semibold">Uploads Timeline</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={stats.uploadsTimeline}>
-                  <defs>
-                    <linearGradient id="indigoGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#6366f1" stopOpacity={0.4} />
-                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0.02} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                  <XAxis dataKey="date" tick={axisTickStyle} />
-                  <YAxis tick={axisTickStyle} />
-                  <Tooltip contentStyle={TOOLTIP_STYLE} />
-                  <Area
-                    type="monotone"
-                    dataKey="entries"
-                    stroke="#6366f1"
-                    strokeWidth={2}
-                    fill="url(#indigoGradient)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border border-border bg-card shadow-sm shadow-black/5 hover:shadow-md transition-shadow duration-200">
-          <CardHeader className="border-b border-border">
-            <CardTitle className="text-base font-semibold">Needs Overview</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <RadarChart data={stats.tagData}>
-                  <PolarGrid stroke={gridStroke} />
-                  <PolarAngleAxis dataKey="name" tick={axisTickStyle} />
-                  <PolarRadiusAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
-                  <Radar
-                    dataKey="count"
-                    stroke="#8b5cf6"
-                    fill="#8b5cf6"
-                    fillOpacity={0.35}
-                  />
-                  <Tooltip contentStyle={TOOLTIP_STYLE} />
-                </RadarChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Row 4 — Recent Uploads Table */}
-      <Card className="border border-border bg-card shadow-sm shadow-black/5 hover:shadow-md transition-shadow duration-200">
-        <CardHeader className="border-b border-border">
-          <CardTitle className="text-lg font-semibold">Recent Uploads</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto scrollbar-thin">
-            <Table className="min-w-[700px]">
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead>Title</TableHead>
-                  <TableHead className="text-right">Entries</TableHead>
-                  <TableHead className="text-right">Critical</TableHead>
-                  <TableHead className="text-right">Avg Severity</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Date</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {stats.recentUploads.slice(0, 5).map((upload, idx) => (
-                  <TableRow key={upload.id} className={idx % 2 !== 0 ? "bg-muted/20" : ""}>
-                    <TableCell className="font-semibold text-foreground">{upload.title}</TableCell>
-                    <TableCell className="text-right tabular-nums font-medium">
-                      {upload.totalEntries.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums font-medium">
-                      <span className={upload.criticalCount > 0 ? "text-red-600 dark:text-red-400" : ""}>
-                        {upload.criticalCount.toLocaleString()}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums font-medium">
-                      {upload.avgSeverity !== null
-                        ? upload.avgSeverity.toFixed(1)
-                        : <span className="text-muted-foreground">—</span>}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={statusVariant(upload.status)}
-                        className={statusColor(upload.status)}
-                      >
-                        {upload.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-xs font-medium">
-                      {new Date(upload.createdAt).toLocaleDateString(undefined, {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                      })}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
           </div>
-        </CardContent>
-      </Card>
+
+          {/* Card 2: Analytics Hub */}
+          <div className="flex flex-col rounded-[1.5rem] border-2 border-cyan-800/60 bg-card overflow-hidden">
+            <div className="bg-cyan-800 px-6 py-5">
+              <div className="flex items-center gap-3">
+                <Activity className="size-6 text-foreground" />
+                <h2 className="text-xl font-extrabold text-foreground">
+                  Analytics Hub
+                </h2>
+              </div>
+            </div>
+            <div className="flex-1 p-6 px-4 pt-0 flex flex-col gap-5">
+              {/* Status donut-style bars */}
+              <div className="rounded-xl bg-muted/30 p-4 space-y-4">
+                <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-muted-foreground">
+                  Case Status
+                </p>
+                <div className="h-4 rounded-full bg-muted/50 overflow-hidden flex">
+                  {resolvedPct > 0 && (
+                    <div
+                      className="h-full bg-emerald-500 transition-all duration-700"
+                      style={{ width: `${resolvedPct}%` }}
+                    />
+                  )}
+                  {pendingPct > 0 && (
+                    <div
+                      className="h-full bg-amber-500 transition-all duration-700"
+                      style={{ width: `${pendingPct}%` }}
+                    />
+                  )}
+                  {noActionPct > 0 && (
+                    <div
+                      className="h-full bg-muted-foreground/30 transition-all duration-700"
+                      style={{ width: `${noActionPct}%` }}
+                    />
+                  )}
+                </div>
+                <div className="flex gap-4 text-[11px]">
+                  <div className="flex items-center gap-1.5 bg-emerald-500 border border-emerald-500/15 rounded-lg p-2">
+                    <span className="font-medium text-foreground">
+                      Resolved{" "}
+                      <span className="font-bold text-foreground">
+                        {stats.resolvedCount}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 bg-amber-500 border border-amber-500/15 rounded-lg p-2">
+                    <span className="font-medium text-foreground">
+                      Pending{" "}
+                      <span className="font-bold text-foreground">
+                        {stats.pendingCount}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 bg-muted-foreground/30 border border-muted-foreground/15 rounded-lg p-2">
+                    <span className="font-medium text-foreground">
+                      None{" "}
+                      <span className="font-bold text-foreground">
+                        {stats.noActionCount}
+                      </span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Top regions */}
+              <div className="flex-1 space-y-3">
+                <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-muted-foreground">
+                  Top Regions
+                </p>
+                {stats.regionData.slice(0, 5).map((r, i) => (
+                  <div
+                    key={r.name}
+                    className="flex items-center gap-3 rounded-lg bg-muted/30 px-3 py-2.5"
+                  >
+                    <span className="flex size-6 items-center justify-center rounded-md bg-primary/10 text-[11px] font-bold text-primary">
+                      {i + 1}
+                    </span>
+                    <span className="flex-1 text-[13px] font-medium text-foreground truncate">
+                      {r.name}
+                    </span>
+                    <span className="text-[12px] font-bold tabular-nums text-muted-foreground">
+                      {r.count}
+                    </span>
+                  </div>
+                ))}
+                {stats.regionData.length === 0 && (
+                  <p className="text-[12px] text-muted-foreground italic py-4 text-center">
+                    No region data available
+                  </p>
+                )}
+              </div>
+
+              {/* Tags */}
+              {stats.tagData.length > 0 && (
+                <div className="space-y-3">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-muted-foreground">
+                    Top Tags
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {stats.tagData.slice(0, 6).map((t) => (
+                      <span
+                        key={t.name}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-primary/8 px-3 py-1 text-[11px] font-semibold text-primary"
+                      >
+                        {t.name}
+                        <span className="text-primary/50">{t.count}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Card 3: Team & Performance */}
+          <div className="flex flex-col rounded-[1.5rem] border-2 border-emerald-500/40 bg-card overflow-hidden">
+            <div className="bg-emerald-500 px-6 py-5">
+              <div className="flex items-center gap-3">
+                <Users className="size-6 text-white" />
+                <h2 className="text-xl font-extrabold text-white">
+                  Team & Status
+                </h2>
+              </div>
+            </div>
+            <div className="flex-1 p-6 flex flex-col gap-5">
+              {/* Quick metric cards */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl bg-muted/50 p-4 text-center">
+                  <p className="text-3xl font-black tabular-nums text-foreground">
+                    {stats.totalVolunteers}
+                  </p>
+                  <p className="text-[11px] font-semibold text-muted-foreground mt-1 uppercase tracking-wider">
+                    Volunteers
+                  </p>
+                </div>
+                <div className="rounded-xl bg-muted/50 p-4 text-center">
+                  <p className="text-3xl font-black tabular-nums text-foreground">
+                    {stats.totalUploads}
+                  </p>
+                  <p className="text-[11px] font-semibold text-muted-foreground mt-1 uppercase tracking-wider">
+                    Uploads
+                  </p>
+                </div>
+              </div>
+
+              {/* Resolution rate */}
+              <div className="rounded-xl bg-emerald-500/8 border border-emerald-500/15 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-[13px] font-bold text-foreground">
+                    Resolution Rate
+                  </p>
+                  <span className="text-2xl font-black tabular-nums text-emerald-500">
+                    {resolvedPct}%
+                  </span>
+                </div>
+                <div className="h-3 rounded-full bg-muted/60 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-emerald-500 transition-all duration-700"
+                    style={{ width: `${resolvedPct}%` }}
+                  />
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  {stats.resolvedCount} of {stats.totalEntries} entries resolved
+                </p>
+              </div>
+
+              {/* Per-upload breakdown */}
+              <div className="flex-1 space-y-3">
+                <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-muted-foreground">
+                  Upload Performance
+                </p>
+                <div className="space-y-2 max-h-[250px] overflow-y-auto">
+                  {stats.uploads.slice(0, 6).map((u) => {
+                    const sev = severityBadge(u.avgSeverity);
+                    return (
+                      <button
+                        key={u.id}
+                        onClick={() =>
+                          router.push(`/dashboard/uploads/${u.id}`)
+                        }
+                        className="w-full flex items-center gap-3 rounded-lg bg-muted/30 px-3 py-2.5 text-left transition-colors hover:bg-muted/60 group cursor-pointer"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[12px] font-semibold text-foreground truncate">
+                            {u.title}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {u.totalEntries} entries
+                          </p>
+                        </div>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-1 rounded-lg ${sev.cls}`}
+                        >
+                          {sev.text}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Right sidebar: Latest Uploads */}
+      <aside className="hidden lg:flex w-80 shrink-0 flex-col border-l border-border bg-card/50 overflow-y-auto">
+        <div className="p-6 space-y-4">
+          <h3 className="text-lg font-bold text-foreground">Latest Uploads</h3>
+
+          {stats.uploads.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="flex size-14 items-center justify-center rounded-2xl bg-muted/60 mb-3">
+                <FileSpreadsheet className="size-6 text-muted-foreground/50" />
+              </div>
+              <p className="text-sm font-semibold text-foreground">
+                No uploads yet
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Data will appear here after the first upload
+              </p>
+            </div>
+          )}
+
+          {stats.uploads.map((upload) => {
+            const sev = severityBadge(upload.avgSeverity);
+            return (
+              <button
+                key={upload.id}
+                onClick={() => router.push(`/dashboard/uploads/${upload.id}`)}
+                className="w-full rounded-2xl border border-border bg-card p-5 flex flex-col gap-3 text-left transition-all hover:border-primary/30 hover:shadow-md group cursor-pointer"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-muted/60">
+                    <FileSpreadsheet className="size-4 text-muted-foreground" />
+                  </div>
+                  <span className="text-[14px] font-bold text-foreground truncate flex-1">
+                    {upload.title}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] text-muted-foreground">
+                    {upload.totalEntries} entries
+                    {upload.criticalCount > 0 && (
+                      <>
+                        {" "}
+                        &middot;{" "}
+                        <span className="text-red-500 font-semibold">
+                          {upload.criticalCount} critical
+                        </span>
+                      </>
+                    )}
+                  </span>
+                  <span
+                    className={`text-[10px] font-bold px-2.5 py-1 rounded-lg ${sev.cls}`}
+                  >
+                    {sev.text}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-muted-foreground/60">
+                    {timeAgo(upload.createdAt)}
+                  </span>
+                  <ChevronRight className="size-4 text-muted-foreground/30 transition-transform group-hover:translate-x-0.5 group-hover:text-muted-foreground" />
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </aside>
     </div>
-  )
+  );
 }

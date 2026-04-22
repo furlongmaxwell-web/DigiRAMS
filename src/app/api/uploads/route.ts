@@ -10,7 +10,9 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const isAdmin = session.user.role === "ADMIN";
   const uploads = await prisma.upload.findMany({
+    where: isAdmin ? {} : { uploadedBy: session.user.id },
     include: { user: { select: { name: true } } },
     orderBy: { createdAt: "desc" },
   });

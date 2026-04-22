@@ -33,7 +33,14 @@ const volunteerLinks = [
 
 export function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname();
-  const links = user.role === "ADMIN" ? adminLinks : volunteerLinks;
+  const isAdmin = user.role?.toUpperCase() === "ADMIN";
+  const links = isAdmin ? adminLinks : volunteerLinks;
+
+  const activeHref = links
+    .filter(
+      (l) => pathname === l.href || pathname.startsWith(l.href + "/"),
+    )
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href ?? null;
 
   return (
     <aside className="flex w-[260px] flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
@@ -58,9 +65,7 @@ export function Sidebar({ user }: SidebarProps) {
           Navigation
         </p>
         {links.map((link) => {
-          const isActive =
-            pathname === link.href + "/" ||
-            (link.href !== "/dashboard" && pathname.endsWith(link.href));
+          const isActive = link.href === activeHref;
 
           return (
             <Link

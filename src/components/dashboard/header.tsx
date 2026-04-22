@@ -8,6 +8,7 @@ import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuLabel,
@@ -66,18 +67,20 @@ export function Header({ user }: HeaderProps) {
           </DropdownMenuTrigger>
 
           <DropdownMenuContent align="end" sideOffset={8}>
-            <DropdownMenuLabel className="font-normal">
-              <div className="flex flex-col gap-1">
-                <p className="text-sm font-semibold leading-none">{user.name}</p>
-                <p className="text-xs text-muted-foreground">{user.email}</p>
-                <Badge
-                  variant="outline"
-                  className="mt-1 w-fit capitalize text-[10px] font-semibold"
-                >
-                  {user.role}
-                </Badge>
-              </div>
-            </DropdownMenuLabel>
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className="font-normal">
+                <div className="flex flex-col gap-1">
+                  <p className="text-sm font-semibold leading-none">{user.name}</p>
+                  <p className="text-xs text-muted-foreground">{user.email}</p>
+                  <Badge
+                    variant="outline"
+                    className="mt-1 w-fit capitalize text-[10px] font-semibold"
+                  >
+                    {user.role}
+                  </Badge>
+                </div>
+              </DropdownMenuLabel>
+            </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onSelect={() => signOut({ callbackUrl: "/login" })}

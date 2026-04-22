@@ -1,12 +1,20 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const isAdmin = session.user.role === "ADMIN";
+  const scopeParam = req.nextUrl.searchParams.get("scope");
+  const filterByUser = scopeParam === "me" || !isAdmin;
+  const userId = filterByUser ? session.user.id : undefined;
+
+  const uploadWhere = userId ? { uploadedBy: userId } : {};
+  const entryWhere = userId ? { upload: { uploadedBy: userId } } : {};
 
   const [
     totalUploads,
@@ -15,23 +23,27 @@ export async function GET() {
     uploads,
     entries,
   ] = await Promise.all([
-    prisma.upload.count(),
-    prisma.surveyEntry.count(),
-    prisma.user.count({ where: { role: "VOLUNTEER" } }),
+    prisma.upload.count({ where: uploadWhere }),
+    prisma.surveyEntry.count({ where: entryWhere }),
+    isAdmin ? prisma.user.count({ where: { role: "VOLUNTEER" } }) : Promise.resolve(0),
     prisma.upload.findMany({
+      where: uploadWhere,
       select: {
         id: true,
         title: true,
         totalEntries: true,
         criticalCount: true,
         avgSeverity: true,
+        aiSummary: true,
         aiTags: true,
         status: true,
         createdAt: true,
+        user: { select: { name: true } },
       },
       orderBy: { createdAt: "desc" },
     }),
     prisma.surveyEntry.findMany({
+      where: entryWhere,
       select: { severityLevel: true, status: true, rawData: true },
     }),
   ]);
@@ -110,14 +122,16 @@ export async function GET() {
     regionData,
     tagData,
     uploadsTimeline,
-    recentUploads: uploads.slice(0, 5).map((u) => ({
+    uploads: uploads.map((u) => ({
       id: u.id,
       title: u.title,
       totalEntries: u.totalEntries,
       criticalCount: u.criticalCount,
       avgSeverity: u.avgSeverity,
+      aiSummary: u.aiSummary,
       status: u.status,
       createdAt: u.createdAt.toISOString(),
+      uploadedByName: u.user.name,
     })),
   });
 }

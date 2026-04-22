@@ -34,16 +34,23 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       if (user) {
-        token.role = (user as { role: string }).role;
+        token.role = ((user as { role: string }).role ?? "").toUpperCase();
         token.id = user.id;
+      }
+      if (trigger === "update" || !token.role || typeof token.role !== "string") {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.id as string },
+          select: { role: true },
+        });
+        if (dbUser) token.role = dbUser.role;
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
-        session.user.role = token.role as string;
+        session.user.role = (token.role as string) ?? "VOLUNTEER";
         session.user.id = token.id as string;
       }
       return session;

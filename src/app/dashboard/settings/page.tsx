@@ -16,7 +16,7 @@ export default function SettingsPage() {
 
   if (!session?.user) return null;
 
-  const isAdmin = session.user.role === "ADMIN";
+  const isAdmin = session.user.role?.toUpperCase() === "ADMIN";
 
   return (
     <div className="space-y-6">
