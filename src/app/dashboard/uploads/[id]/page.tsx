@@ -30,6 +30,7 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -355,23 +356,24 @@ export default function UploadDetailPage() {
     };
   }, [id, page]);
 
+  const selectedEntryId = selectedEntry?.id;
+  const selectedSeverity = selectedEntry?.severityLevel;
+  const selectedReason = selectedEntry?.severityReason;
+
   useEffect(() => {
     if (
-      !selectedEntry ||
-      selectedEntry.severityReason ||
-      !selectedEntry.severityLevel ||
-      (selectedEntry.severityLevel !== "HIGH" &&
-        selectedEntry.severityLevel !== "CRITICAL")
+      !selectedEntryId ||
+      selectedReason ||
+      !selectedSeverity ||
+      (selectedSeverity !== "HIGH" && selectedSeverity !== "CRITICAL")
     ) {
       return;
     }
 
     let cancelled = false;
-    setTimeout(() => {
-      setReasonLoading(true);
-    }, 1000);
+    setReasonLoading(true);
 
-    fetch(`/api/uploads/${id}/entries/${selectedEntry.id}/reason`, {
+    fetch(`/api/uploads/${id}/entries/${selectedEntryId}/reason`, {
       method: "POST",
     })
       .then((r) => r.json())
@@ -386,7 +388,7 @@ export default function UploadDetailPage() {
             return {
               ...prev,
               entries: prev.entries.map((e) =>
-                e.id === selectedEntry.id
+                e.id === selectedEntryId
                   ? { ...e, severityReason: data.reason }
                   : e,
               ),
@@ -402,12 +404,7 @@ export default function UploadDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [
-    selectedEntry?.id,
-    selectedEntry?.severityReason,
-    selectedEntry?.severityLevel,
-    id,
-  ]);
+  }, [selectedEntryId, selectedReason, selectedSeverity, id]);
 
   const toggleSeverity = (level: SeverityLevel) => {
     setSeverityFilters((prev) => {
@@ -765,7 +762,9 @@ export default function UploadDetailPage() {
               className="max-h-80 w-64 overflow-y-auto"
               align="end"
             >
-              <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
+              </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <div className="flex gap-1.5 px-1.5 pb-1.5">
                 <button

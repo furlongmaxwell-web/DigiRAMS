@@ -1,53 +1,10 @@
+import { generateText } from "ai";
 import { prisma } from "./prisma";
+import { deepseek } from "./ai";
 import { SeverityLevel, Status } from "@/generated/prisma/client";
 
-const DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions";
 const BATCH_SIZE = 30;
-
-async function callDeepSeek(
-  systemPrompt: string,
-  userPrompt: string
-): Promise<string> {
-  const apiKey = process.env.DEEPSEEK_API_KEY;
-  if (!apiKey || apiKey === "your-deepseek-api-key-here") {
-    throw new Error("DEEPSEEK_API_KEY is not configured");
-  }
-
-  const response = await fetch(DEEPSEEK_API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "deepseek-chat",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.1,
-      max_tokens: 8192,
-    }),
-  });
-
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`DeepSeek API error: ${response.status} - ${err}`);
-  }
-
-  const data = await response.json();
-  return data.choices[0].message.content;
-}
-
-function extractJSON(text: string): string {
-  const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (match) return match[1].trim();
-
-  const jsonMatch = text.match(/[\[{][\s\S]*[\]}]/);
-  if (jsonMatch) return jsonMatch[0].trim();
-
-  return text.trim();
-}
+const MAX_CONCURRENT = 5;
 
 const SEVERITY_SYSTEM_PROMPT = `You are a humanitarian data analyst. Analyze survey entries and assign severity levels.
 
@@ -80,8 +37,8 @@ Focus on: unmet needs, access obstacles, aid effectiveness, regional patterns, a
 Respond ONLY with valid JSON. Format:
 {"summary": "...", "tags": ["tag1", "tag2", ...]}`;
 
-const VALID_SEVERITY: Set<string> = new Set(Object.values(SeverityLevel));
-const VALID_STATUS: Set<string> = new Set(Object.values(Status));
+const VALID_SEVERITY = new Set<string>(Object.values(SeverityLevel));
+const VALID_STATUS = new Set<string>(Object.values(Status));
 
 function parseSeverity(val: string | number): SeverityLevel {
   if (typeof val === "string" && VALID_SEVERITY.has(val)) return val as SeverityLevel;
@@ -106,6 +63,67 @@ function parseStatus(val: string): Status {
   return map[val] ?? Status.PENDING;
 }
 
+function extractJSON(text: string): string {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenced) return fenced[1].trim();
+  const raw = text.match(/[\[{][\s\S]*[\]}]/);
+  if (raw) return raw[0].trim();
+  return text.trim();
+}
+
+const SEVERITY_TO_NUM: Record<string, number> = {
+  MINIMAL: 1, LOW: 2, MODERATE: 3, HIGH: 4, CRITICAL: 5,
+};
+
+interface BatchInput {
+  index: number;
+  entries: { id: string; rawData: string }[];
+  batchData: Record<string, unknown>[];
+}
+
+interface BatchResult {
+  id: string;
+  severity_level: string | number;
+  status: string;
+  reason?: string;
+}
+
+async function analyzeBatch(batch: BatchInput): Promise<{ results: BatchResult[]; batchData: Record<string, unknown>[] }> {
+  const { text } = await generateText({
+    model: deepseek("deepseek-chat"),
+    system: SEVERITY_SYSTEM_PROMPT,
+    prompt: JSON.stringify(batch.batchData),
+    temperature: 0.1,
+    maxOutputTokens: 8192,
+  });
+
+  const results: BatchResult[] = JSON.parse(extractJSON(text));
+  return { results, batchData: batch.batchData };
+}
+
+async function runWithConcurrency<T, R>(
+  items: T[],
+  fn: (item: T) => Promise<R>,
+  concurrency: number,
+): Promise<PromiseSettledResult<R>[]> {
+  const results: PromiseSettledResult<R>[] = new Array(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const idx = nextIndex++;
+      try {
+        results[idx] = { status: "fulfilled", value: await fn(items[idx]) };
+      } catch (reason) {
+        results[idx] = { status: "rejected", reason };
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
+  return results;
+}
+
 export async function analyzeUpload(uploadId: string): Promise<void> {
   try {
     const entries = await prisma.surveyEntry.findMany({
@@ -125,31 +143,28 @@ export async function analyzeUpload(uploadId: string): Promise<void> {
       data: { status: "analyzing" },
     });
 
-    let totalProcessed = 0;
-    const allRawData: Record<string, string>[] = [];
-
+    const batches: BatchInput[] = [];
     for (let i = 0; i < entries.length; i += BATCH_SIZE) {
-      const batch = entries.slice(i, i + BATCH_SIZE);
-      const batchData = batch.map((e) => ({
-        id: e.id,
-        ...JSON.parse(e.rawData),
-      }));
+      const slice = entries.slice(i, i + BATCH_SIZE);
+      batches.push({
+        index: i,
+        entries: slice,
+        batchData: slice.map((e) => ({ id: e.id, ...JSON.parse(e.rawData) })),
+      });
+    }
 
-      allRawData.push(...batchData);
+    const allRawData: Record<string, unknown>[] = [];
+    let totalProcessed = 0;
 
-      try {
-        const response = await callDeepSeek(
-          SEVERITY_SYSTEM_PROMPT,
-          JSON.stringify(batchData)
-        );
+    const settled = await runWithConcurrency(batches, analyzeBatch, MAX_CONCURRENT);
 
-        const jsonStr = extractJSON(response);
-        const results: {
-          id: string;
-          severity_level: string | number;
-          status: string;
-          reason?: string;
-        }[] = JSON.parse(jsonStr);
+    for (let i = 0; i < settled.length; i++) {
+      const batch = batches[i];
+      const outcome = settled[i];
+
+      if (outcome.status === "fulfilled") {
+        const { results, batchData } = outcome.value;
+        allRawData.push(...batchData);
 
         for (const result of results) {
           await prisma.surveyEntry.update({
@@ -161,9 +176,10 @@ export async function analyzeUpload(uploadId: string): Promise<void> {
             },
           });
         }
-      } catch (batchError) {
-        console.error(`Batch analysis failed for batch starting at ${i}:`, batchError);
-        for (const entry of batch) {
+      } else {
+        console.error(`Batch ${i} failed:`, outcome.reason);
+        allRawData.push(...batch.batchData);
+        for (const entry of batch.entries) {
           await prisma.surveyEntry.update({
             where: { id: entry.id },
             data: { severityLevel: SeverityLevel.MODERATE, status: Status.PENDING },
@@ -171,78 +187,47 @@ export async function analyzeUpload(uploadId: string): Promise<void> {
         }
       }
 
-      totalProcessed += batch.length;
+      totalProcessed += batch.entries.length;
       await prisma.upload.update({
         where: { id: uploadId },
         data: { processedEntries: totalProcessed },
       });
     }
 
+    // Summary generation
     try {
       const sampleData = allRawData.slice(0, 50);
-      const summaryResponse = await callDeepSeek(
-        SUMMARY_SYSTEM_PROMPT,
-        `Analyze these ${entries.length} survey entries (showing sample of ${sampleData.length}):\n${JSON.stringify(sampleData)}`
-      );
-
-      const jsonStr = extractJSON(summaryResponse);
-      const summaryResult: { summary: string; tags: string[] } = JSON.parse(jsonStr);
-
-      const updatedEntries = await prisma.surveyEntry.findMany({
-        where: { uploadId },
-        select: { severityLevel: true },
+      const { text: summaryText } = await generateText({
+        model: deepseek("deepseek-chat"),
+        system: SUMMARY_SYSTEM_PROMPT,
+        prompt: `Analyze these ${entries.length} survey entries (showing sample of ${sampleData.length}):\n${JSON.stringify(sampleData)}`,
+        temperature: 0.1,
+        maxOutputTokens: 4096,
       });
 
-      const severityToNum: Record<string, number> = {
-        MINIMAL: 1, LOW: 2, MODERATE: 3, HIGH: 4, CRITICAL: 5,
-      };
-      const numericSeverities = updatedEntries
-        .map((e) => e.severityLevel ? severityToNum[e.severityLevel] ?? 0 : 0)
-        .filter((s) => s > 0);
-      const avgSeverity = numericSeverities.length > 0
-        ? numericSeverities.reduce((a, b) => a + b, 0) / numericSeverities.length
-        : 0;
-      const criticalCount = updatedEntries.filter(
-        (e) => e.severityLevel === SeverityLevel.HIGH || e.severityLevel === SeverityLevel.CRITICAL
-      ).length;
+      const summaryResult: { summary: string; tags: string[] } = JSON.parse(extractJSON(summaryText));
+      const stats = await computeUploadStats(uploadId);
 
       await prisma.upload.update({
         where: { id: uploadId },
         data: {
           aiSummary: summaryResult.summary,
           aiTags: JSON.stringify(summaryResult.tags),
-          avgSeverity: Math.round(avgSeverity * 10) / 10,
-          criticalCount,
+          ...stats,
           processedEntries: entries.length,
           status: "done",
         },
       });
     } catch (summaryError) {
       console.error("Summary generation failed:", summaryError);
-      const updatedEntries = await prisma.surveyEntry.findMany({
-        where: { uploadId },
-        select: { severityLevel: true },
-      });
-      const severityToNum: Record<string, number> = {
-        MINIMAL: 1, LOW: 2, MODERATE: 3, HIGH: 4, CRITICAL: 5,
-      };
-      const numericSeverities = updatedEntries
-        .map((e) => e.severityLevel ? severityToNum[e.severityLevel] ?? 0 : 0)
-        .filter((s) => s > 0);
-      const avgSeverity = numericSeverities.length > 0
-        ? numericSeverities.reduce((a, b) => a + b, 0) / numericSeverities.length
-        : 0;
-      const criticalCount = updatedEntries.filter(
-        (e) => e.severityLevel === SeverityLevel.HIGH || e.severityLevel === SeverityLevel.CRITICAL
-      ).length;
+      const stats = await computeUploadStats(uploadId);
 
       await prisma.upload.update({
         where: { id: uploadId },
         data: {
           aiSummary: "Analysis completed but summary generation failed. Please review entries individually.",
           aiTags: "[]",
-          avgSeverity: Math.round(avgSeverity * 10) / 10,
-          criticalCount,
+          ...stats,
           processedEntries: entries.length,
           status: "done",
         },
@@ -255,4 +240,29 @@ export async function analyzeUpload(uploadId: string): Promise<void> {
       data: { status: "failed" },
     });
   }
+}
+
+async function computeUploadStats(uploadId: string) {
+  const updatedEntries = await prisma.surveyEntry.findMany({
+    where: { uploadId },
+    select: { severityLevel: true },
+  });
+
+  const numericSeverities = updatedEntries
+    .map((e) => (e.severityLevel ? SEVERITY_TO_NUM[e.severityLevel] ?? 0 : 0))
+    .filter((s) => s > 0);
+
+  const avgSeverity =
+    numericSeverities.length > 0
+      ? numericSeverities.reduce((a, b) => a + b, 0) / numericSeverities.length
+      : 0;
+
+  const criticalCount = updatedEntries.filter(
+    (e) => e.severityLevel === SeverityLevel.HIGH || e.severityLevel === SeverityLevel.CRITICAL,
+  ).length;
+
+  return {
+    avgSeverity: Math.round(avgSeverity * 10) / 10,
+    criticalCount,
+  };
 }
