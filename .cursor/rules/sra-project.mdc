@@ -1,0 +1,51 @@
+---
+description: SRA project conventions, architecture, and coding standards
+alwaysApply: true
+---
+
+# SRA - Smart Resource Allocation
+
+Hackathon project by Taskforce 141. Data-driven volunteer coordination for social impact.
+
+## Tech Stack
+
+- Next.js 16 (App Router) + TypeScript
+- Prisma 7 ORM with SQLite (dev) — requires `@prisma/adapter-better-sqlite3`
+- NextAuth.js v5 beta (Credentials provider, JWT sessions)
+- shadcn/ui v4 (base-ui/react based) + Tailwind CSS v4
+- Recharts for charts
+- PapaParse for CSV parsing
+- DeepSeek API for AI severity analysis
+- next-themes for dark/light mode
+
+## Database (3 tables)
+
+- **User** — admin (hardcoded) + volunteers (created by admin). Password hashed with bcryptjs. Role: "admin" | "volunteer". Skills/tags stored as JSON strings (SQLite compat).
+- **Upload** — one per CSV file. Stores header schema as JSON, AI summary, severity stats. Status: uploading → parsing → analyzing → done | failed.
+- **SurveyEntry** — one per CSV row. `rawData` is a JSON string of key-value pairs (normalized column headers). Severity 1-5, status: pending | resolved | no_action_needed.
+
+## Architecture Rules
+
+- Prisma client requires `PrismaBetterSqlite3` adapter — see `src/lib/prisma.ts`
+- The dev.db file lives at the project root (not in prisma/), matching `DATABASE_URL="file:./dev.db"`
+- Admin is seeded via `prisma/seed.ts` — never create admin through the API
+- Auth guards: dashboard layout checks session server-side, API routes check `await auth()`
+- Role guards: admin-only endpoints check `session.user.role === "admin"`
+- CSV upload flow: parse → store entries → fire-and-forget `analyzeUpload()` → frontend polls status
+
+## UI/Styling Rules
+
+- shadcn v4 uses base-ui/react. Button does NOT support `asChild`. Use `render` prop for polymorphism: `<Button render={<Link href="..." />}>`
+- DialogTrigger also does NOT support `asChild` — style it directly with className
+- ALWAYS use theme-aware CSS variables: `bg-card`, `bg-background`, `text-foreground`, `text-muted-foreground`, `border-border`, `bg-primary`, `text-primary`, etc.
+- NEVER hardcode colors like `bg-white`, `bg-slate-xxx`, `text-gray-xxx`
+- All Card components must have `border border-border` for visible borders in both themes
+- Dark mode variants: use `dark:` prefix, e.g. `bg-blue-100 dark:bg-blue-950/30`
+
+## File Patterns
+
+- API routes: `src/app/api/` — return NextResponse.json
+- Pages: `src/app/` — server components by default, "use client" when needed
+- Shared components: `src/components/`
+- Utilities: `src/lib/` (prisma.ts, auth.ts, csv-parser.ts, ai-analyzer.ts)
+- Types: `src/types/index.ts`

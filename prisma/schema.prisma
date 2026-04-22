@@ -1,0 +1,79 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum Role {
+  ADMIN
+  VOLUNTEER
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  password     String
+  role         Role     @default(VOLUNTEER)
+  skills       String   @default("[]")
+  region       String?
+  availability Boolean  @default(true)
+  uploads      Upload[]
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+model Upload {
+  id               String        @id @default(cuid())
+  uploadedBy       String        @map("uploaded_by")
+  user             User          @relation(fields: [uploadedBy], references: [id])
+  title            String
+  totalEntries     Int           @default(0) @map("total_entries")
+  processedEntries Int           @default(0) @map("processed_entries")
+  status           String        @default("uploading")
+  headers          String        @default("[]")
+  aiSummary        String?       @map("ai_summary")
+  aiTags           String        @default("[]") @map("ai_tags")
+  avgSeverity      Float?        @map("avg_severity")
+  criticalCount    Int           @default(0) @map("critical_count")
+  entries          SurveyEntry[]
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  @@map("uploads")
+}
+
+enum SeverityLevel {
+  MINIMAL
+  LOW
+  MODERATE
+  HIGH
+  CRITICAL
+}
+
+enum Status {
+  PENDING
+  RESOLVED
+  NO_ACTION_NEEDED
+}
+
+model SurveyEntry {
+  id             String         @id @default(cuid())
+  uploadId       String         @map("upload_id")
+  upload         Upload         @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  rawData        String         @default("{}") @map("raw_data")
+  severityLevel  SeverityLevel? @default(MINIMAL) @map("severity_level")
+  severityReason String?        @map("severity_reason")
+  status         Status         @default(PENDING)
+  createdAt      DateTime       @default(now()) @map("created_at")
+
+  @@index([uploadId])
+  @@index([severityLevel])
+  @@index([status])
+  @@map("survey_entries")
+}
