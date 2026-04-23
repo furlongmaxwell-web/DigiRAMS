@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SRA - Smart Resource Allocation",
+  title: "DigiRAMS - Digital Resource Allocation Management System",
   description:
     "Data-Driven Volunteer Coordination for Social Impact by Taskforce 141",
 };

@@ -55,10 +55,10 @@ export default function LoginPage() {
             <Shield className="size-8" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            Smart Resource Allocation
+            DigiRAMS
           </h1>
           <p className="text-muted-foreground mt-1">
-            Taskforce 141 — Volunteer Coordination Platform
+            Digital Resource Allocation Management System
           </p>
         </div>
 

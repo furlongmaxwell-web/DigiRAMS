@@ -11,6 +11,7 @@ import {
   ChevronUp,
   Clock,
   Columns3,
+  Download,
   Eye,
   EyeOff,
   FileSpreadsheet,
@@ -254,6 +255,11 @@ function UploadStatusBadge({ status }: { status: string }) {
     failed: {
       icon: AlertTriangle,
       label: "Failed",
+      cls: "bg-red-500/15 text-red-500",
+    },
+    error: {
+      icon: AlertTriangle,
+      label: "Error",
       cls: "bg-red-500/15 text-red-500",
     },
   };
@@ -599,6 +605,34 @@ export default function UploadDetailPage() {
     sortDir,
   ]);
 
+  const exportCSV = useCallback(() => {
+    if (!upload || !filteredAndSorted.length) return;
+    const csvHeaders = [
+      "severity",
+      "status",
+      ...visibleHeaders.map((h) => h.label),
+    ];
+    const rows = filteredAndSorted.map((entry) => {
+      const sev = entry.severityLevel ?? "";
+      const stat = entry.status;
+      const cells = visibleHeaders.map((h) => {
+        const val = entry.rawData[h.key] ?? "";
+        return val.includes(",") || val.includes('"') || val.includes("\n")
+          ? `"${val.replace(/"/g, '""')}"`
+          : val;
+      });
+      return [sev, stat, ...cells].join(",");
+    });
+    const csv = [csvHeaders.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${upload.title.replace(/[^a-zA-Z0-9]/g, "_")}_export.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [upload, filteredAndSorted, visibleHeaders]);
+
   const stats = useMemo(() => {
     if (!entries)
       return { total: 0, critical: 0, pending: 0, resolved: 0, noAction: 0 };
@@ -708,10 +742,26 @@ export default function UploadDetailPage() {
 
       {/* AI Summary */}
       {upload.aiSummary && (
-        <div className="rounded-xl border border-primary/20 bg-primary/3 p-5">
+        <div
+          className={`rounded-xl border p-5 ${
+            upload.status === "error"
+              ? "border-red-500/20 bg-red-500/5"
+              : "border-primary/20 bg-primary/3"
+          }`}
+        >
           <div className="flex items-center gap-2 mb-3">
-            <Brain className="size-4 text-primary" />
-            <span className="text-sm font-bold text-primary">AI Summary</span>
+            {upload.status === "error" ? (
+              <AlertTriangle className="size-4 text-red-500" />
+            ) : (
+              <Brain className="size-4 text-primary" />
+            )}
+            <span
+              className={`text-sm font-bold ${
+                upload.status === "error" ? "text-red-500" : "text-primary"
+              }`}
+            >
+              {upload.status === "error" ? "Analysis Error" : "AI Summary"}
+            </span>
           </div>
           <p className="text-sm leading-relaxed text-foreground/80">
             {upload.aiSummary}
@@ -863,6 +913,18 @@ export default function UploadDetailPage() {
               </div>
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {/* Export CSV */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={exportCSV}
+            disabled={!filteredAndSorted.length}
+          >
+            <Download className="size-3.5" />
+            Export
+          </Button>
 
           {/* Clear All */}
           {activeFilterCount > 0 && (

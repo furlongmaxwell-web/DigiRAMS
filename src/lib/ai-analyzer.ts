@@ -4,8 +4,9 @@ import { deepseek } from "./ai";
 import { SeverityLevel, Status } from "@/generated/prisma/client";
 import { sanitizeRow } from "./sanitize";
 
-const BATCH_SIZE = 30;
-const MAX_CONCURRENT = 5;
+const BATCH_SIZE = 20;
+const MAX_CONCURRENT = 3;
+const AI_TIMEOUT_MS = 120_000;
 
 const SEVERITY_SYSTEM_PROMPT = `You are a humanitarian data analyst. Analyze survey entries and assign severity levels.
 
@@ -77,7 +78,7 @@ const SEVERITY_TO_NUM: Record<string, number> = {
 };
 
 interface BatchInput {
-  index: number;
+  batchNum: number;
   entries: { id: string; rawData: string }[];
   batchData: Record<string, unknown>[];
 }
@@ -89,47 +90,21 @@ interface BatchResult {
   reason?: string;
 }
 
-async function analyzeBatch(batch: BatchInput): Promise<{ results: BatchResult[]; batchData: Record<string, unknown>[] }> {
-  const { text } = await generateText({
-    model: deepseek("deepseek-chat"),
-    system: SEVERITY_SYSTEM_PROMPT,
-    prompt: JSON.stringify(batch.batchData),
-    temperature: 0.1,
-    maxOutputTokens: 8192,
-  });
-
-  const results: BatchResult[] = JSON.parse(extractJSON(text));
-  return { results, batchData: batch.batchData };
-}
-
-async function runWithConcurrency<T, R>(
-  items: T[],
-  fn: (item: T) => Promise<R>,
-  concurrency: number,
-): Promise<PromiseSettledResult<R>[]> {
-  const results: PromiseSettledResult<R>[] = new Array(items.length);
-  let nextIndex = 0;
-
-  async function worker() {
-    while (nextIndex < items.length) {
-      const idx = nextIndex++;
-      try {
-        results[idx] = { status: "fulfilled", value: await fn(items[idx]) };
-      } catch (reason) {
-        results[idx] = { status: "rejected", reason };
-      }
-    }
-  }
-
-  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
-  return results;
-}
+const activeAnalyses = new Set<string>();
 
 export async function analyzeUpload(uploadId: string): Promise<void> {
+  if (activeAnalyses.has(uploadId)) {
+    console.log(`[ai-analyzer] Upload ${uploadId} is already being analyzed, skipping duplicate call`);
+    return;
+  }
+  activeAnalyses.add(uploadId);
+
+  console.log(`[ai-analyzer] ====== analyzeUpload started for ${uploadId} ======`);
   try {
     const entries = await prisma.surveyEntry.findMany({
       where: { uploadId },
     });
+    console.log(`[ai-analyzer] Found ${entries.length} entries`);
 
     if (entries.length === 0) {
       await prisma.upload.update({
@@ -141,14 +116,14 @@ export async function analyzeUpload(uploadId: string): Promise<void> {
 
     await prisma.upload.update({
       where: { id: uploadId },
-      data: { status: "analyzing" },
+      data: { status: "analyzing", processedEntries: 0 },
     });
 
     const batches: BatchInput[] = [];
     for (let i = 0; i < entries.length; i += BATCH_SIZE) {
       const slice = entries.slice(i, i + BATCH_SIZE);
       batches.push({
-        index: i,
+        batchNum: batches.length + 1,
         entries: slice,
         batchData: slice.map((e) => {
           const parsed = JSON.parse(e.rawData);
@@ -158,48 +133,116 @@ export async function analyzeUpload(uploadId: string): Promise<void> {
       });
     }
 
+    const totalBatches = batches.length;
+    console.log(`[ai-analyzer] Created ${totalBatches} batches for ${entries.length} entries`);
+
     const allRawData: Record<string, unknown>[] = [];
     let totalProcessed = 0;
+    let failedBatches = 0;
+    let nextIdx = 0;
 
-    const settled = await runWithConcurrency(batches, analyzeBatch, MAX_CONCURRENT);
+    async function worker() {
+      while (nextIdx < batches.length) {
+        const idx = nextIdx++;
+        const batch = batches[idx];
+        const validIds = new Set(batch.entries.map((e) => e.id));
 
-    for (let i = 0; i < settled.length; i++) {
-      const batch = batches[i];
-      const outcome = settled[i];
+        try {
+          console.log(`[ai-analyzer] Batch ${batch.batchNum}/${totalBatches}: sending ${batch.entries.length} entries to AI`);
+          const startMs = Date.now();
 
-      if (outcome.status === "fulfilled") {
-        const { results, batchData } = outcome.value;
-        allRawData.push(...batchData);
-
-        for (const result of results) {
-          await prisma.surveyEntry.update({
-            where: { id: result.id },
-            data: {
-              severityLevel: parseSeverity(result.severity_level),
-              severityReason: result.reason || null,
-              status: parseStatus(result.status),
-            },
+          const { text } = await generateText({
+            model: deepseek("deepseek-chat"),
+            system: SEVERITY_SYSTEM_PROMPT,
+            prompt: JSON.stringify(batch.batchData),
+            temperature: 0.1,
+            maxOutputTokens: 8192,
+            abortSignal: AbortSignal.timeout(AI_TIMEOUT_MS),
           });
+
+          const elapsed = Date.now() - startMs;
+          console.log(`[ai-analyzer] Batch ${batch.batchNum}/${totalBatches}: AI responded in ${elapsed}ms (${text.length} chars)`);
+
+          const results: BatchResult[] = JSON.parse(extractJSON(text));
+          allRawData.push(...batch.batchData);
+
+          let updated = 0;
+          let skipped = 0;
+          for (const result of results) {
+            if (!result.id || !validIds.has(result.id)) {
+              skipped++;
+              continue;
+            }
+            try {
+              await prisma.surveyEntry.update({
+                where: { id: result.id },
+                data: {
+                  severityLevel: parseSeverity(result.severity_level),
+                  severityReason: result.reason || null,
+                  status: parseStatus(result.status),
+                },
+              });
+              updated++;
+              validIds.delete(result.id);
+            } catch (err) {
+              skipped++;
+              console.error(`[ai-analyzer] Batch ${batch.batchNum}: failed to update entry ${result.id}:`, err);
+            }
+          }
+
+          if (validIds.size > 0) {
+            console.warn(`[ai-analyzer] Batch ${batch.batchNum}: ${validIds.size} entries had no AI result, assigning defaults`);
+            for (const missingId of validIds) {
+              await prisma.surveyEntry.update({
+                where: { id: missingId },
+                data: { severityLevel: SeverityLevel.MODERATE, status: Status.PENDING },
+              });
+            }
+          }
+
+          console.log(`[ai-analyzer] Batch ${batch.batchNum}/${totalBatches}: ${updated} updated, ${skipped} skipped`);
+        } catch (err) {
+          failedBatches++;
+          console.error(`[ai-analyzer] Batch ${batch.batchNum}/${totalBatches} FAILED:`, err);
+          allRawData.push(...batch.batchData);
+          for (const entry of batch.entries) {
+            try {
+              await prisma.surveyEntry.update({
+                where: { id: entry.id },
+                data: { severityLevel: SeverityLevel.MODERATE, status: Status.PENDING },
+              });
+            } catch { /* entry may not exist */ }
+          }
         }
-      } else {
-        console.error(`Batch ${i} failed:`, outcome.reason);
-        allRawData.push(...batch.batchData);
-        for (const entry of batch.entries) {
-          await prisma.surveyEntry.update({
-            where: { id: entry.id },
-            data: { severityLevel: SeverityLevel.MODERATE, status: Status.PENDING },
-          });
-        }
+
+        totalProcessed += batch.entries.length;
+        await prisma.upload.update({
+          where: { id: uploadId },
+          data: { processedEntries: totalProcessed },
+        });
+        console.log(`[ai-analyzer] Progress: ${totalProcessed}/${entries.length} entries (${Math.round((totalProcessed / entries.length) * 100)}%)`);
       }
-
-      totalProcessed += batch.entries.length;
-      await prisma.upload.update({
-        where: { id: uploadId },
-        data: { processedEntries: totalProcessed },
-      });
     }
 
-    // Summary generation
+    await Promise.all(
+      Array.from({ length: Math.min(MAX_CONCURRENT, batches.length) }, () => worker()),
+    );
+
+    console.log(`[ai-analyzer] ====== Severity done: ${totalBatches - failedBatches} ok, ${failedBatches} failed ======`);
+
+    if (failedBatches === totalBatches) {
+      await prisma.upload.update({
+        where: { id: uploadId },
+        data: {
+          status: "error",
+          aiSummary: "All AI analysis batches failed. Check your DEEPSEEK_API_KEY and try re-analyzing.",
+          processedEntries: entries.length,
+        },
+      });
+      return;
+    }
+
+    console.log(`[ai-analyzer] Starting summary generation...`);
     try {
       const sampleData = allRawData.slice(0, 50);
       const { text: summaryText } = await generateText({
@@ -208,6 +251,7 @@ export async function analyzeUpload(uploadId: string): Promise<void> {
         prompt: `Analyze these ${entries.length} survey entries (showing sample of ${sampleData.length}):\n${JSON.stringify(sampleData)}`,
         temperature: 0.1,
         maxOutputTokens: 4096,
+        abortSignal: AbortSignal.timeout(AI_TIMEOUT_MS),
       });
 
       const summaryResult: { summary: string; tags: string[] } = JSON.parse(extractJSON(summaryText));
@@ -223,8 +267,9 @@ export async function analyzeUpload(uploadId: string): Promise<void> {
           status: "done",
         },
       });
+      console.log(`[ai-analyzer] ====== Analysis complete for ${uploadId} ======`);
     } catch (summaryError) {
-      console.error("Summary generation failed:", summaryError);
+      console.error("[ai-analyzer] Summary generation failed:", summaryError);
       const stats = await computeUploadStats(uploadId);
 
       await prisma.upload.update({
@@ -239,11 +284,17 @@ export async function analyzeUpload(uploadId: string): Promise<void> {
       });
     }
   } catch (error) {
-    console.error("Upload analysis failed:", error);
+    console.error("[ai-analyzer] Upload analysis failed:", error);
+    const message = error instanceof Error ? error.message : String(error);
     await prisma.upload.update({
       where: { id: uploadId },
-      data: { status: "failed" },
+      data: {
+        status: "error",
+        aiSummary: `Analysis failed: ${message}`,
+      },
     });
+  } finally {
+    activeAnalyses.delete(uploadId);
   }
 }
 

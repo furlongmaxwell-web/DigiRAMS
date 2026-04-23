@@ -54,6 +54,8 @@ function statusLabel(status: string): { label: string; cls: string } {
       return { label: "Uploading", cls: "text-blue-400" };
     case "failed":
       return { label: "Failed", cls: "text-red-400" };
+    case "error":
+      return { label: "Error", cls: "text-red-400" };
     default:
       return { label: status, cls: "text-muted-foreground" };
   }

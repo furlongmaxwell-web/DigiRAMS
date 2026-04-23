@@ -1,40 +1,61 @@
-import "dotenv/config";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
-import { PrismaClient } from "../src/generated/prisma/client.js";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { hashSync } from "bcryptjs";
-import path from "path";
-import { fileURLToPath } from "url";
+import "dotenv/config";
+import { PrismaClient } from "../src/generated/prisma/client.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dbPath = path.join(__dirname, "..", "dev.db");
-const adapter = new PrismaBetterSqlite3({ url: `file:${dbPath}` });
+const adapter = new PrismaPg({ connectionString: process.env.DIRECT_URL! });
 const prisma = new PrismaClient({ adapter });
 
-async function main() {
-  const existing = await prisma.user.findUnique({
-    where: { email: "admin@taskforce141.com" },
-  });
+const users = [
+  {
+    name: "Admin",
+    email: "admin@taskforce141.com",
+    password: hashSync("admin@141", 12),
+    role: "ADMIN" as const,
+    skills: JSON.stringify(["management", "coordination", "analytics"]),
+    region: "Global",
+  },
+  {
+    name: "Mohan Jodaro",
+    email: "mohan@sra.com",
+    password: hashSync("volunteer@141", 12),
+    role: "VOLUNTEER" as const,
+    skills: JSON.stringify(["field-survey", "data-collection"]),
+    region: "SHAN",
+  },
+  {
+    name: "Sara Ahmed",
+    email: "sara@sra.com",
+    password: hashSync("volunteer@141", 12),
+    role: "VOLUNTEER" as const,
+    skills: JSON.stringify(["medical", "first-aid", "translation"]),
+    region: "MANDALAY",
+  },
+];
 
-  if (!existing) {
-    await prisma.user.create({
-      data: {
-        name: "Admin",
-        email: "admin@taskforce141.com",
-        password: hashSync("admin@141", 12),
-        role: "ADMIN",
-        skills: JSON.stringify(["management", "coordination"]),
-        region: "Global",
-      },
+async function main() {
+  console.log("Seeding database...\n");
+
+  for (const user of users) {
+    const existing = await prisma.user.findUnique({
+      where: { email: user.email },
     });
-    console.log("Admin user seeded: admin@taskforce141.com / admin@141");
-  } else {
-    console.log("Admin user already exists, skipping seed.");
+
+    if (existing) {
+      console.log(`  [skip] ${user.email} already exists`);
+      continue;
+    }
+
+    await prisma.user.create({ data: user });
+    console.log(`  [created] ${user.email} (${user.role})`);
   }
+
+  console.log("\nSeed complete.");
 }
 
 main()
   .catch((e) => {
-    console.error(e);
+    console.error("Seed failed:", e);
     process.exit(1);
   })
   .finally(async () => {

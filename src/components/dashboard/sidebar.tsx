@@ -1,16 +1,18 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
   FileSpreadsheet,
   LayoutDashboard,
+  LogOut,
   PlusCircle,
   Settings,
   Shield,
   Upload,
+  User,
   Users,
 } from "lucide-react";
+import { signOut } from "next-auth/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -29,6 +31,7 @@ const volunteerLinks = [
   { href: "/dashboard", label: "My Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/uploads", label: "Uploads", icon: Upload },
   { href: "/dashboard/uploads/new", label: "New Upload", icon: PlusCircle },
+  { href: "/dashboard/profile", label: "My Profile", icon: User },
 ];
 
 export function Sidebar({ user }: SidebarProps) {
@@ -42,7 +45,7 @@ export function Sidebar({ user }: SidebarProps) {
       .sort((a, b) => b.href.length - a.href.length)[0]?.href ?? null;
 
   return (
-    <aside className="flex w-[260px] flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground ">
+    <aside className="flex w-[260px] flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
       {/* Brand */}
       <div className="flex items-center gap-3 border-b border-sidebar-border px-5 py-4">
         <div className="flex size-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shadow-sm shadow-sidebar-primary/20">
@@ -50,7 +53,7 @@ export function Sidebar({ user }: SidebarProps) {
         </div>
         <div>
           <h2 className="text-sm font-bold tracking-tight text-sidebar-foreground">
-            Digi-SRA Platform
+            DigiRAMS
           </h2>
           <p className="text-[11px] font-medium text-sidebar-foreground/50">
             by Taskforce 141
@@ -94,24 +97,28 @@ export function Sidebar({ user }: SidebarProps) {
         })}
       </nav>
 
-      {/* User */}
-      <div className="border-t border-sidebar-border px-4 py-4">
-        <div className="flex items-center gap-3">
-          <div className="flex size-9 items-center justify-center rounded-full bg-sidebar-primary/20 text-sm font-bold text-sidebar-primary">
+      {/* User + Sign out */}
+      <div className="border-t border-sidebar-border px-3 py-3 space-y-2">
+        <div className="flex items-center gap-3 rounded-lg px-3 py-2.5">
+          <div className="flex size-9 items-center justify-center rounded-full bg-sidebar-primary/20 text-sm font-bold text-sidebar-primary shrink-0">
             {user.name?.charAt(0).toUpperCase() ?? "?"}
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-[13px] font-semibold text-sidebar-foreground">
               {user.name}
             </p>
-            <Badge
-              variant="outline"
-              className="mt-0.5 border-sidebar-border text-[10px] font-semibold capitalize text-sidebar-foreground/50"
-            >
-              {user.role}
-            </Badge>
+            <p className="truncate text-[11px] text-sidebar-foreground/40">
+              {user.email}
+            </p>
           </div>
         </div>
+        <button
+          onClick={() => signOut({ callbackUrl: "/" })}
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium text-red-400 transition-all duration-200 hover:bg-red-500/10 hover:text-red-300"
+        >
+          <LogOut className="size-[18px] shrink-0" />
+          Sign Out
+        </button>
       </div>
     </aside>
   );
