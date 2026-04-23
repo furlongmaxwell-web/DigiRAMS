@@ -129,7 +129,7 @@ interface ColumnFilter {
 /*  Constants                                                          */
 /* ------------------------------------------------------------------ */
 
-const LIMIT = 50;
+const LIMIT = 500; // Increased to 500 to allow global-like filtering on the client for typical datasets
 
 const DEFAULT_VISIBLE_KEYS = new Set([
   "survey_id",
@@ -358,6 +358,7 @@ export default function UploadDetailPage() {
   const [reasonLoading, setReasonLoading] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [columnFilters, setColumnFilters] = useState<ColumnFilter[]>([]);
+  const [fieldFilters, setFieldFilters] = useState<Record<string, string>>({});
   const [entriesVersion, setEntriesVersion] = useState(0);
 
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
@@ -369,6 +370,7 @@ export default function UploadDetailPage() {
 
   const debouncedSearchQuery = useDebounce(searchQuery, 400);
   const debouncedColumnFilters = useDebounce(columnFilters, 400);
+  const debouncedFieldFilters = useDebounce(fieldFilters, 400);
 
   /* ---------- data fetching ---------- */
 
@@ -548,12 +550,14 @@ export default function UploadDetailPage() {
     severityFilters.size +
     statusFilters.size +
     (searchQuery ? 1 : 0) +
-    columnFilters.filter((f) => f.value.trim()).length;
+    columnFilters.filter((f) => f.value.trim()).length +
+    Object.values(fieldFilters).filter(v => v.trim()).length;
   const clearFilters = () => {
     setSeverityFilters(new Set());
     setStatusFilters(new Set());
     setSearchQuery("");
     setColumnFilters([]);
+    setFieldFilters({});
   };
 
   const applyColumnFilter = useCallback(
@@ -597,6 +601,17 @@ export default function UploadDetailPage() {
 
     // Search, status, and severity are now filtered on the backend.
     // We only need to apply column filters on the frontend.
+    // Field-specific smart filters
+    for (const [key, val] of Object.entries(debouncedFieldFilters)) {
+      if (val.trim()) {
+        const q = val.toLowerCase();
+        result = result.filter(e => {
+          const raw = e.rawData[key];
+          return raw && String(raw).toLowerCase().includes(q);
+        });
+      }
+    }
+
     for (const cf of debouncedColumnFilters) {
       if (cf.value.trim())
         result = result.filter((e) => applyColumnFilter(e, cf));
@@ -625,6 +640,7 @@ export default function UploadDetailPage() {
   }, [
     entries,
     debouncedColumnFilters,
+    debouncedFieldFilters,
     applyColumnFilter,
     sortField,
     sortDir,
@@ -1009,7 +1025,20 @@ export default function UploadDetailPage() {
 
         {/* Expandable filter panel */}
         {showFilters && (
-          <div className="border-t border-border px-4 py-4 space-y-5 bg-muted/20">
+          <div className="border-t border-border px-4 py-4 space-y-5 bg-muted/20 animate-in fade-in slide-in-from-top-2 duration-200">
+            {/* Project Goal Summary */}
+            {upload.aiTags.length > 0 && (
+              <div className="flex items-center gap-2 pb-2">
+                <div className="flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-bold text-primary uppercase tracking-wider border border-primary/20">
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-primary"></span>
+                  </span>
+                  Data Goal: {upload.aiTags.join(", ")}
+                </div>
+              </div>
+            )}
+            
             {/* Severity & Status row */}
             <div className="grid gap-5 sm:grid-cols-2">
               <div className="space-y-2.5">
@@ -1067,6 +1096,63 @@ export default function UploadDetailPage() {
                 </div>
               </div>
             </div>
+            
+            {/* Field-wise Smart Search (Dynamically based on headers) */}
+            {upload.headers.length > 0 && (
+              <div className="space-y-3 pt-3 border-t border-border/40">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                    Quick Search by Field
+                  </p>
+                  <p className="text-[10px] text-muted-foreground/60 italic">
+                    Search specific columns based on your dataset headers
+                  </p>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                  {upload.headers
+                    .filter(h => {
+                      const l = h.label.toLowerCase();
+                      return l.includes("name") || l.includes("group") || l.includes("status") || 
+                             l.includes("age") || l.includes("gender") || l.includes("location") || 
+                             l.includes("blood") || l.includes("literacy") || l.includes("date") ||
+                             l.includes("id") || l.includes("title") || l.includes("region") ||
+                             l.includes("severity") || l.includes("donation") || l.includes("type") ||
+                             l.includes("category") || l.includes("level");
+                    })
+                    .slice(0, 16)
+                    .map((header) => (
+                      <div key={header.key} className="space-y-1.5 group">
+                        <label className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-tight group-hover:text-primary transition-colors">
+                          {header.label}
+                        </label>
+                        <div className="relative">
+                          <Input
+                            placeholder={`Find ${header.label}...`}
+                            value={fieldFilters[header.key] || ""}
+                            onChange={(e) => setFieldFilters(prev => ({
+                              ...prev,
+                              [header.key]: e.target.value
+                            }))}
+                            className="h-8 text-xs bg-background/50 focus:bg-background pr-7 border-muted-foreground/10 focus:border-primary/30 transition-all"
+                          />
+                          {fieldFilters[header.key] && (
+                            <button
+                              onClick={() => setFieldFilters(prev => {
+                                const next = { ...prev };
+                                delete next[header.key];
+                                return next;
+                              })}
+                              className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground/50 hover:text-foreground"
+                            >
+                              <X className="size-3" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
 
             {/* Column-specific filters */}
             <div className="space-y-3">
