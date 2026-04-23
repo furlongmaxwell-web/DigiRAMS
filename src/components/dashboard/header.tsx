@@ -83,7 +83,12 @@ export function Header({ user }: HeaderProps) {
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              onSelect={() => signOut({ callbackUrl: "/login" })}
+              onSelect={async (e) => {
+                e.preventDefault();
+                await signOut({ redirect: false });
+                window.location.href = "/";
+              }}
+              className="cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50"
             >
               <LogOut className="mr-2 size-4" />
               Sign out
