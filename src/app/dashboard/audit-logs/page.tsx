@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
+import { useDebounce } from "@/hooks/use-debounce";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -263,40 +264,28 @@ export default function AuditLogsPage() {
   const [page, setPage] = useState(1);
   const limit = 20;
 
-  const [debouncedFilters, setDebouncedFilters] = useState({
-    action,
-    entityType,
-    search,
-    from,
-    to,
-    sortOrder,
-  });
-
-  const isFirstRender = React.useRef(true);
+  const debouncedSearch = useDebounce(search, 500);
+  const debouncedAction = useDebounce(action, 300);
+  const debouncedEntityType = useDebounce(entityType, 300);
+  const debouncedFrom = useDebounce(from, 300);
+  const debouncedTo = useDebounce(to, 300);
+  const debouncedSortOrder = useDebounce(sortOrder, 300);
 
   useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
-    const handler = setTimeout(() => {
-      setDebouncedFilters({ action, entityType, search, from, to, sortOrder });
-      setPage(1);
-    }, 500);
-    return () => clearTimeout(handler);
-  }, [action, entityType, search, from, to, sortOrder]);
+    setPage(1);
+  }, [debouncedSearch, debouncedAction, debouncedEntityType, debouncedFrom, debouncedTo, debouncedSortOrder]);
 
   const fetchLogs = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams();
     params.set("page", String(page));
     params.set("limit", String(limit));
-    params.set("sortOrder", debouncedFilters.sortOrder);
-    if (debouncedFilters.action !== "All") params.set("action", debouncedFilters.action);
-    if (debouncedFilters.entityType !== "All") params.set("entityType", debouncedFilters.entityType);
-    if (debouncedFilters.search.trim()) params.set("search", debouncedFilters.search.trim());
-    if (debouncedFilters.from) params.set("from", debouncedFilters.from);
-    if (debouncedFilters.to) params.set("to", debouncedFilters.to);
+    params.set("sortOrder", debouncedSortOrder);
+    if (debouncedAction !== "All") params.set("action", debouncedAction);
+    if (debouncedEntityType !== "All") params.set("entityType", debouncedEntityType);
+    if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
+    if (debouncedFrom) params.set("from", debouncedFrom);
+    if (debouncedTo) params.set("to", debouncedTo);
 
     try {
       const res = await fetch(`/api/audit-logs?${params.toString()}`);
@@ -309,7 +298,7 @@ export default function AuditLogsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, debouncedFilters]);
+  }, [page, debouncedAction, debouncedEntityType, debouncedSearch, debouncedFrom, debouncedTo, debouncedSortOrder]);
 
   useEffect(() => {
     fetchLogs();
@@ -322,14 +311,6 @@ export default function AuditLogsPage() {
     setFrom("");
     setTo("");
     setSortOrder("desc");
-    setDebouncedFilters({
-      action: "All",
-      entityType: "All",
-      search: "",
-      from: "",
-      to: "",
-      sortOrder: "desc",
-    });
     setPage(1);
   };
 
