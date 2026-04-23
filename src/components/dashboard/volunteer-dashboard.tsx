@@ -3,8 +3,10 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Activity,
+  AlertTriangle,
   CheckCircle2,
   ChevronRight,
+  ClipboardList,
   Clock,
   Database,
   FileSpreadsheet,
@@ -108,19 +110,38 @@ interface Props {
   userName: string;
 }
 
+interface TaskSummary {
+  total: number;
+  assigned: number;
+  inProgress: number;
+  resolved: number;
+  escalated: number;
+}
+
 export function VolunteerDashboard({ userName }: Props) {
   const router = useRouter();
   const [stats, setStats] = useState<Stats | null>(null);
+  const [taskSummary, setTaskSummary] = useState<TaskSummary>({
+    total: 0, assigned: 0, inProgress: 0, resolved: 0, escalated: 0,
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/stats?scope=me")
-      .then((res) => res.json())
-      .then((data: Stats) => {
-        setStats(data);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+    Promise.all([
+      fetch("/api/stats?scope=me").then((r) => r.json()),
+      fetch("/api/my-tasks").then((r) => r.json()).catch(() => []),
+    ]).then(([statsData, tasks]: [Stats, { status: string }[]]) => {
+      setStats(statsData);
+      const summary: TaskSummary = {
+        total: tasks.length,
+        assigned: tasks.filter((t) => t.status === "ASSIGNED").length,
+        inProgress: tasks.filter((t) => t.status === "IN_PROGRESS").length,
+        resolved: tasks.filter((t) => t.status === "RESOLVED").length,
+        escalated: tasks.filter((t) => t.status === "ESCALATED").length,
+      };
+      setTaskSummary(summary);
+      setLoading(false);
+    }).catch(() => setLoading(false));
   }, []);
 
   if (loading || !stats) return <DashboardSkeleton />;
@@ -305,20 +326,67 @@ export function VolunteerDashboard({ userName }: Props) {
             </div>
           </div>
 
-          {/* Card 3: Quick Actions + Upload Summary */}
+          {/* Card 3: Tasks + Quick Actions */}
           <div className="flex flex-col rounded-[1.5rem] border-2 border-emerald-500/40 bg-card overflow-hidden">
             <div className="bg-emerald-500 px-6 py-5">
               <div className="flex items-center gap-3">
-                <Upload className="size-6 text-white" />
+                <ClipboardList className="size-6 text-white" />
                 <h2 className="text-xl font-extrabold text-white">
-                  Quick Actions
+                  Tasks & Actions
                 </h2>
               </div>
             </div>
             <div className="flex-1 p-6 flex flex-col gap-5">
+              {/* Active tasks summary */}
+              {taskSummary.total > 0 && (
+                <button
+                  onClick={() => router.push("/dashboard/tasks")}
+                  className="w-full rounded-xl border-2 border-blue-500/30 bg-blue-500/5 p-4 text-left transition-all hover:border-blue-500/50 hover:shadow-md cursor-pointer"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-[13px] font-bold text-foreground">
+                      My Active Tasks
+                    </p>
+                    <span className="text-xl font-black tabular-nums text-blue-500">
+                      {taskSummary.total}
+                    </span>
+                  </div>
+                  <div className="flex gap-3 text-[11px]">
+                    {taskSummary.assigned > 0 && (
+                      <span className="inline-flex items-center gap-1 text-blue-500 font-semibold">
+                        <Clock className="size-3" /> {taskSummary.assigned} New
+                      </span>
+                    )}
+                    {taskSummary.inProgress > 0 && (
+                      <span className="inline-flex items-center gap-1 text-amber-500 font-semibold">
+                        <Activity className="size-3" /> {taskSummary.inProgress} Active
+                      </span>
+                    )}
+                    {taskSummary.escalated > 0 && (
+                      <span className="inline-flex items-center gap-1 text-red-500 font-semibold">
+                        <AlertTriangle className="size-3" /> {taskSummary.escalated} Escalated
+                      </span>
+                    )}
+                    {taskSummary.resolved > 0 && (
+                      <span className="inline-flex items-center gap-1 text-emerald-500 font-semibold">
+                        <CheckCircle2 className="size-3" /> {taskSummary.resolved} Done
+                      </span>
+                    )}
+                  </div>
+                </button>
+              )}
+
+              <button
+                onClick={() => router.push("/dashboard/tasks")}
+                className="w-full flex items-center gap-3 rounded-xl bg-blue-500 px-5 py-4 text-white font-bold text-[15px] transition-all hover:brightness-110 active:scale-[0.98] cursor-pointer"
+              >
+                <ClipboardList className="size-5" />
+                View My Tasks
+              </button>
+
               <button
                 onClick={() => router.push("/dashboard/uploads/new")}
-                className="w-full flex items-center gap-3 rounded-xl bg-emerald-500 px-5 py-4 text-white font-bold text-[15px] transition-all hover:brightness-110 active:scale-[0.98]"
+                className="w-full flex items-center gap-3 rounded-xl bg-emerald-500 px-5 py-4 text-white font-bold text-[15px] transition-all hover:brightness-110 active:scale-[0.98] cursor-pointer"
               >
                 <PlusCircle className="size-5" />
                 New Upload
@@ -326,7 +394,7 @@ export function VolunteerDashboard({ userName }: Props) {
 
               <button
                 onClick={() => router.push("/dashboard/uploads")}
-                className="w-full flex items-center gap-3 rounded-xl border-2 border-border px-5 py-4 font-bold text-[15px] text-foreground transition-all hover:bg-muted/50"
+                className="w-full flex items-center gap-3 rounded-xl border-2 border-border px-5 py-4 font-bold text-[15px] text-foreground transition-all hover:bg-muted/50 cursor-pointer"
               >
                 <FileSpreadsheet className="size-5 text-muted-foreground" />
                 View All Uploads

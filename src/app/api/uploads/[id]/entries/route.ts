@@ -44,6 +44,17 @@ export async function GET(
   const [entries, total] = await Promise.all([
     prisma.surveyEntry.findMany({
       where: whereClause,
+      include: {
+        assignment: {
+          select: {
+            id: true,
+            status: true,
+            note: true,
+            volunteerNote: true,
+            volunteer: { select: { id: true, name: true } },
+          },
+        },
+      },
       orderBy,
       skip,
       take: limit,
@@ -58,6 +69,16 @@ export async function GET(
     severityReason: e.severityReason,
     status: e.status,
     createdAt: e.createdAt.toISOString(),
+    assignment: e.assignment
+      ? {
+          id: e.assignment.id,
+          status: e.assignment.status,
+          note: e.assignment.note,
+          volunteerNote: e.assignment.volunteerNote,
+          volunteerId: e.assignment.volunteer.id,
+          volunteerName: e.assignment.volunteer.name,
+        }
+      : null,
   }));
 
   return NextResponse.json({

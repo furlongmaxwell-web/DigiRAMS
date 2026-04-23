@@ -22,6 +22,7 @@ import {
   ShieldAlert,
   SlidersHorizontal,
   Trash2,
+  UserPlus,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -81,12 +82,32 @@ interface UploadMeta {
 type SeverityLevel = "MINIMAL" | "LOW" | "MODERATE" | "HIGH" | "CRITICAL";
 type EntryStatus = "PENDING" | "RESOLVED" | "NO_ACTION_NEEDED";
 
+interface AssignmentData {
+  id: string;
+  status: string;
+  note: string;
+  volunteerNote: string | null;
+  volunteerId: string;
+  volunteerName: string;
+}
+
 interface EntryData {
   id: string;
   rawData: Record<string, string>;
   severityLevel: SeverityLevel | null;
   severityReason: string | null;
   status: EntryStatus;
+  assignment: AssignmentData | null;
+}
+
+interface VolunteerOption {
+  id: string;
+  name: string;
+  email: string;
+  skills: string[];
+  region: string | null;
+  availability: boolean;
+  uploadsCount: number;
 }
 
 interface EntriesResponse {
@@ -338,6 +359,13 @@ export default function UploadDetailPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [columnFilters, setColumnFilters] = useState<ColumnFilter[]>([]);
   const [entriesVersion, setEntriesVersion] = useState(0);
+
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [assignEntry, setAssignEntry] = useState<EntryData | null>(null);
+  const [volunteers, setVolunteers] = useState<VolunteerOption[]>([]);
+  const [assignVolunteerId, setAssignVolunteerId] = useState("");
+  const [assignNote, setAssignNote] = useState("");
+  const [assignLoading, setAssignLoading] = useState(false);
 
   const debouncedSearchQuery = useDebounce(searchQuery, 400);
   const debouncedColumnFilters = useDebounce(columnFilters, 400);
@@ -629,6 +657,49 @@ export default function UploadDetailPage() {
     a.click();
     URL.revokeObjectURL(url);
   }, [upload, filteredAndSorted, visibleHeaders]);
+
+  const openAssignDialog = useCallback(
+    async (entry: EntryData) => {
+      setAssignEntry(entry);
+      setAssignVolunteerId("");
+      setAssignNote("");
+      setAssignDialogOpen(true);
+      try {
+        const res = await fetch("/api/volunteers");
+        if (res.ok) setVolunteers(await res.json());
+      } catch { /* ignore */ }
+    },
+    [],
+  );
+
+  const submitAssignment = useCallback(async () => {
+    if (!assignEntry || !assignVolunteerId) return;
+    setAssignLoading(true);
+    try {
+      const res = await fetch(`/api/entries/${assignEntry.id}/assign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ volunteerId: assignVolunteerId, note: assignNote }),
+      });
+      if (res.ok) {
+        setAssignDialogOpen(false);
+        setEntriesVersion((v) => v + 1);
+        setSelectedEntry(null);
+      }
+    } finally {
+      setAssignLoading(false);
+    }
+  }, [assignEntry, assignVolunteerId, assignNote]);
+
+  const unassignEntry = useCallback(async (entryId: string) => {
+    try {
+      const res = await fetch(`/api/entries/${entryId}/assign`, { method: "DELETE" });
+      if (res.ok) {
+        setEntriesVersion((v) => v + 1);
+        setSelectedEntry(null);
+      }
+    } catch { /* ignore */ }
+  }, []);
 
   const stats = useMemo(() => {
     if (!entries)
@@ -1157,6 +1228,11 @@ export default function UploadDetailPage() {
                         />
                       </button>
                     </TableHead>
+                    <TableHead className="w-[140px]">
+                      <span className="text-[11px] font-bold uppercase tracking-wider">
+                        Assigned To
+                      </span>
+                    </TableHead>
                     {visibleHeaders.map((h) => (
                       <TableHead key={h.key}>
                         <button
@@ -1222,6 +1298,17 @@ export default function UploadDetailPage() {
                               {stat.label}
                             </span>
                           </TableCell>
+                          <TableCell>
+                            {entry.assignment ? (
+                              <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/15 px-2.5 py-1 text-[11px] font-semibold text-blue-600 dark:text-blue-400">
+                                {entry.assignment.volunteerName}
+                              </span>
+                            ) : (
+                              <span className="text-[11px] text-muted-foreground/50">
+                                —
+                              </span>
+                            )}
+                          </TableCell>
                           {visibleHeaders.map((header) => {
                             const val = entry.rawData[header.key] ?? "";
                             const bool =
@@ -1266,7 +1353,7 @@ export default function UploadDetailPage() {
                   ) : (
                     <TableRow>
                       <TableCell
-                        colSpan={3 + visibleHeaders.length}
+                        colSpan={4 + visibleHeaders.length}
                         className="py-16 text-center"
                       >
                         <div className="flex flex-col items-center gap-3">
@@ -1442,6 +1529,64 @@ export default function UploadDetailPage() {
                     </div>
                   )}
 
+                  {/* Assignment section */}
+                  <div className="mx-4 mb-3">
+                    {selectedEntry.assignment ? (
+                      <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 space-y-3">
+                        <p className="text-xs font-bold uppercase tracking-wider text-blue-500">
+                          Assigned to {selectedEntry.assignment.volunteerName}
+                        </p>
+                        <p className="text-[11px] font-semibold text-muted-foreground">
+                          Status:{" "}
+                          <span className="text-foreground">
+                            {selectedEntry.assignment.status.replace("_", " ")}
+                          </span>
+                        </p>
+                        {selectedEntry.assignment.note && (
+                          <p className="text-sm text-foreground/80">
+                            <span className="font-medium text-muted-foreground">Admin note:</span>{" "}
+                            {selectedEntry.assignment.note}
+                          </p>
+                        )}
+                        {selectedEntry.assignment.volunteerNote && (
+                          <p className="text-sm text-foreground/80">
+                            <span className="font-medium text-muted-foreground">Volunteer note:</span>{" "}
+                            {selectedEntry.assignment.volunteerNote}
+                          </p>
+                        )}
+                        <div className="flex gap-2 pt-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 gap-1.5"
+                            onClick={() => openAssignDialog(selectedEntry)}
+                          >
+                            <UserPlus className="size-3.5" />
+                            Reassign
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 gap-1.5 text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                            onClick={() => unassignEntry(selectedEntry.id)}
+                          >
+                            <X className="size-3.5" />
+                            Unassign
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        className="w-full gap-2"
+                        onClick={() => openAssignDialog(selectedEntry)}
+                      >
+                        <UserPlus className="size-4" />
+                        Assign to Volunteer
+                      </Button>
+                    )}
+                  </div>
+
                   <div className="space-y-0.5 px-4 pb-6">
                     {upload.headers.map((header) => {
                       const val = selectedEntry.rawData[header.key] ?? "";
@@ -1479,6 +1624,99 @@ export default function UploadDetailPage() {
             })()}
         </SheetContent>
       </Sheet>
+
+      {/* ============================================================ */}
+      {/*  ASSIGN DIALOG                                                */}
+      {/* ============================================================ */}
+      {assignDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-xl max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-lg font-bold text-foreground">Assign to Volunteer</h3>
+              <button
+                onClick={() => setAssignDialogOpen(false)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 mb-5">
+              {volunteers
+                .filter((v) => v.availability)
+                .map((v) => {
+                  const skills: string[] = Array.isArray(v.skills) ? v.skills : [];
+                  return (
+                    <button
+                      key={v.id}
+                      onClick={() => setAssignVolunteerId(v.id)}
+                      className={`w-full flex items-start gap-3 rounded-xl border-2 p-3.5 text-left transition-all cursor-pointer ${
+                        assignVolunteerId === v.id
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-primary/30"
+                      }`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-foreground">{v.name}</p>
+                        <p className="text-xs text-muted-foreground">{v.email}</p>
+                        {v.region && (
+                          <p className="text-xs text-muted-foreground mt-0.5">Region: {v.region}</p>
+                        )}
+                        {skills.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {skills.map((s) => (
+                              <span
+                                key={s}
+                                className="inline-flex rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary"
+                              >
+                                {s}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              {volunteers.filter((v) => v.availability).length === 0 && (
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  No available volunteers found
+                </p>
+              )}
+            </div>
+
+            <div className="mb-4">
+              <label className="text-xs font-semibold text-muted-foreground mb-1.5 block">
+                Note for volunteer (optional)
+              </label>
+              <textarea
+                value={assignNote}
+                onChange={(e) => setAssignNote(e.target.value)}
+                placeholder="Add instructions or context..."
+                rows={3}
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setAssignDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1"
+                disabled={!assignVolunteerId || assignLoading}
+                onClick={submitAssignment}
+              >
+                {assignLoading ? "Assigning..." : "Assign Task"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const where: any = {};
 
-    if (action && ["CREATE", "READ", "UPDATE", "DELETE"].includes(action.toUpperCase())) {
+    if (action && ["CREATE", "UPDATE", "DELETE"].includes(action.toUpperCase())) {
       where.action = action.toUpperCase();
     }
 

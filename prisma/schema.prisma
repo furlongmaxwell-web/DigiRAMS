@@ -13,18 +13,21 @@ enum Role {
 }
 
 model User {
-  id           String     @id @default(cuid())
-  name         String
-  email        String     @unique
-  password     String
-  role         Role       @default(VOLUNTEER)
-  skills       String     @default("[]")
-  region       String?
-  availability Boolean    @default(true)
-  uploads      Upload[]
-  auditLogs    AuditLog[]
-  createdAt    DateTime   @default(now()) @map("created_at")
-  updatedAt    DateTime   @updatedAt @map("updated_at")
+  id              String         @id @default(cuid())
+  name            String
+  email           String         @unique
+  password        String
+  role            Role           @default(VOLUNTEER)
+  skills          String         @default("[]")
+  region          String?
+  availability    Boolean        @default(true)
+  uploads         Upload[]
+  auditLogs       AuditLog[]
+  assignments     Assignment[]   @relation("VolunteerAssignments")
+  assignedTasks   Assignment[]   @relation("AdminAssignments")
+  notifications   Notification[]
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
 
   @@map("users")
 }
@@ -71,12 +74,55 @@ model SurveyEntry {
   severityLevel  SeverityLevel? @default(MINIMAL) @map("severity_level")
   severityReason String?        @map("severity_reason")
   status         Status         @default(PENDING)
+  assignment     Assignment?
   createdAt      DateTime       @default(now()) @map("created_at")
 
   @@index([uploadId])
   @@index([severityLevel])
   @@index([status])
   @@map("survey_entries")
+}
+
+enum AssignmentStatus {
+  ASSIGNED
+  IN_PROGRESS
+  RESOLVED
+  ESCALATED
+}
+
+model Assignment {
+  id            String           @id @default(cuid())
+  entryId       String           @unique @map("entry_id")
+  entry         SurveyEntry      @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  volunteerId   String           @map("volunteer_id")
+  volunteer     User             @relation("VolunteerAssignments", fields: [volunteerId], references: [id])
+  assignedById  String           @map("assigned_by_id")
+  assignedBy    User             @relation("AdminAssignments", fields: [assignedById], references: [id])
+  note          String           @default("")
+  status        AssignmentStatus @default(ASSIGNED)
+  volunteerNote String?          @map("volunteer_note")
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+
+  @@index([volunteerId])
+  @@index([assignedById])
+  @@index([status])
+  @@map("assignments")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  linkUrl   String?  @map("link_url")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, read])
+  @@index([createdAt])
+  @@map("notifications")
 }
 
 model AuditLog {
