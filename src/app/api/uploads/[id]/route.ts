@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { logAudit } from "@/lib/audit";
 
 export async function GET(
   _req: NextRequest,
@@ -21,6 +22,15 @@ export async function GET(
   if (!upload) {
     return NextResponse.json({ error: "Upload not found" }, { status: 404 });
   }
+
+  // Log READ audit event (admin opened/viewed an upload)
+  logAudit({
+    userId: session.user.id,
+    action: "READ",
+    entityType: "Upload",
+    entityId: upload.id,
+    entityTitle: upload.title,
+  });
 
   return NextResponse.json({
     id: upload.id,
@@ -49,6 +59,23 @@ export async function DELETE(
 
   const { id } = await params;
 
+  // Fetch the upload before deleting so we can log its title
+  const upload = await prisma.upload.findUnique({
+    where: { id },
+    select: { title: true, totalEntries: true },
+  });
+
   await prisma.upload.delete({ where: { id } });
+
+  // Log DELETE audit event
+  logAudit({
+    userId: session.user.id,
+    action: "DELETE",
+    entityType: "Upload",
+    entityId: id,
+    entityTitle: upload?.title ?? "Unknown",
+    details: { totalEntries: upload?.totalEntries ?? 0 },
+  });
+
   return NextResponse.json({ success: true });
 }

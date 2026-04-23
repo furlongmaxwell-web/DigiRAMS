@@ -1,13 +1,14 @@
-import { NextRequest, NextResponse } from "next/server";
+import { analyzeUpload } from "@/lib/ai-analyzer";
+import { logAudit } from "@/lib/audit";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { parseSpreadsheet } from "@/lib/spreadsheet-parser";
-import { analyzeUpload } from "@/lib/ai-analyzer";
 import {
-  validateUploadedFile,
-  validateDataLimits,
   sanitizeTitle,
+  validateDataLimits,
+  validateUploadedFile,
 } from "@/lib/sanitize";
+import { parseSpreadsheet } from "@/lib/spreadsheet-parser";
+import { NextRequest, NextResponse } from "next/server";
 
 export async function GET() {
   const session = await auth();
@@ -121,6 +122,16 @@ export async function POST(req: NextRequest) {
     await prisma.upload.update({
       where: { id: upload.id },
       data: { status: "analyzing" },
+    });
+
+    // Log CREATE audit event
+    logAudit({
+      userId: session.user.id,
+      action: "CREATE",
+      entityType: "Upload",
+      entityId: upload.id,
+      entityTitle: title,
+      details: { fileName: file.name, totalEntries: rows.length, headers },
     });
 
     analyzeUpload(upload.id).catch((err) =>
