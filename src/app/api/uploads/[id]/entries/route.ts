@@ -17,6 +17,9 @@ export async function GET(
   const limit = parseInt(url.searchParams.get("limit") || "50");
   const sortBy = url.searchParams.get("sortBy") || "severityLevel";
   const sortOrder = url.searchParams.get("sortOrder") || "desc";
+  const search = url.searchParams.get("search") || "";
+  const statusFilter = url.searchParams.get("status") || "";
+  const severityFilter = url.searchParams.get("severity") || "";
 
   const skip = (page - 1) * limit;
 
@@ -27,14 +30,25 @@ export async function GET(
     orderBy["createdAt"] = "desc";
   }
 
+  const whereClause: any = { uploadId: id };
+  if (search) {
+    whereClause.rawData = { contains: search, mode: "insensitive" };
+  }
+  if (statusFilter) {
+    whereClause.status = { in: statusFilter.split(",") };
+  }
+  if (severityFilter) {
+    whereClause.severityLevel = { in: severityFilter.split(",") };
+  }
+
   const [entries, total] = await Promise.all([
     prisma.surveyEntry.findMany({
-      where: { uploadId: id },
+      where: whereClause,
       orderBy,
       skip,
       take: limit,
     }),
-    prisma.surveyEntry.count({ where: { uploadId: id } }),
+    prisma.surveyEntry.count({ where: whereClause }),
   ]);
 
   const data = entries.map((e) => ({

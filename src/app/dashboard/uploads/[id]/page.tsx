@@ -27,6 +27,7 @@ import {
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useDebounce } from "@/hooks/use-debounce";
 
 import { TableSkeleton } from "@/components/skeletons/table-skeleton";
 import { Button } from "@/components/ui/button";
@@ -338,6 +339,9 @@ export default function UploadDetailPage() {
   const [columnFilters, setColumnFilters] = useState<ColumnFilter[]>([]);
   const [entriesVersion, setEntriesVersion] = useState(0);
 
+  const debouncedSearchQuery = useDebounce(searchQuery, 400);
+  const debouncedColumnFilters = useDebounce(columnFilters, 400);
+
   /* ---------- data fetching ---------- */
 
   useEffect(() => {
@@ -376,7 +380,12 @@ export default function UploadDetailPage() {
     const fetchId = ++entriesFetchId.current;
     const ctrl = new AbortController();
     setEntriesLoading(true);
-    fetch(`/api/uploads/${id}/entries?page=${page}&limit=${LIMIT}`, {
+
+    const searchParam = debouncedSearchQuery ? `&search=${encodeURIComponent(debouncedSearchQuery)}` : "";
+    const statusParam = statusFilters.size > 0 ? `&status=${Array.from(statusFilters).join(",")}` : "";
+    const severityParam = severityFilters.size > 0 ? `&severity=${Array.from(severityFilters).join(",")}` : "";
+
+    fetch(`/api/uploads/${id}/entries?page=${page}&limit=${LIMIT}${searchParam}${statusParam}${severityParam}`, {
       signal: ctrl.signal,
     })
       .then((r) => r.json())
@@ -390,7 +399,7 @@ export default function UploadDetailPage() {
         if (entriesFetchId.current === fetchId) setEntriesLoading(false);
       });
     return () => ctrl.abort();
-  }, [id, page, entriesVersion]);
+  }, [id, page, entriesVersion, debouncedSearchQuery, statusFilters, severityFilters]);
 
   const selectedEntryId = selectedEntry?.id;
   const selectedSeverity = selectedEntry?.severityLevel;
@@ -557,19 +566,10 @@ export default function UploadDetailPage() {
   const filteredAndSorted = useMemo(() => {
     if (!entries) return [];
     let result = entries.entries;
-    if (severityFilters.size > 0)
-      result = result.filter(
-        (e) => e.severityLevel !== null && severityFilters.has(e.severityLevel),
-      );
-    if (statusFilters.size > 0)
-      result = result.filter((e) => statusFilters.has(e.status));
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter((e) =>
-        Object.values(e.rawData).some((v) => v.toLowerCase().includes(q)),
-      );
-    }
-    for (const cf of columnFilters) {
+
+    // Search, status, and severity are now filtered on the backend.
+    // We only need to apply column filters on the frontend.
+    for (const cf of debouncedColumnFilters) {
       if (cf.value.trim())
         result = result.filter((e) => applyColumnFilter(e, cf));
     }
@@ -596,10 +596,7 @@ export default function UploadDetailPage() {
     return result;
   }, [
     entries,
-    severityFilters,
-    statusFilters,
-    searchQuery,
-    columnFilters,
+    debouncedColumnFilters,
     applyColumnFilter,
     sortField,
     sortDir,

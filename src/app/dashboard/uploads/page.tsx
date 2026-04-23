@@ -1,11 +1,13 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronRight, FileSpreadsheet, PlusCircle, ScrollText } from "lucide-react";
+import { ChevronRight, FileSpreadsheet, PlusCircle, ScrollText, Search, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useDebounce } from "@/hooks/use-debounce";
 
 interface UploadData {
   id: string;
@@ -84,6 +86,10 @@ export default function UploadsPage() {
   const [uploads, setUploads] = useState<UploadData[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [sortOrder, setSortOrder] = useState("date-desc");
+  const debouncedSearchQuery = useDebounce(searchQuery, 400);
 
   useEffect(() => {
     fetch("/api/uploads")
@@ -110,6 +116,30 @@ export default function UploadsPage() {
       </div>
     );
   }
+
+  let filteredUploads = uploads.filter((u) => {
+    if (statusFilter !== "all" && u.status !== statusFilter) return false;
+    if (debouncedSearchQuery) {
+      const q = debouncedSearchQuery.toLowerCase();
+      if (!u.title.toLowerCase().includes(q) && !u.uploadedByName.toLowerCase().includes(q)) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  filteredUploads = filteredUploads.sort((a, b) => {
+    if (sortOrder === "date-desc") {
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    } else if (sortOrder === "date-asc") {
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    } else if (sortOrder === "entries-desc") {
+      return b.totalEntries - a.totalEntries;
+    } else if (sortOrder === "name-asc") {
+      return a.title.localeCompare(b.title);
+    }
+    return 0;
+  });
 
   return (
     <div className="flex min-h-[calc(100vh-57px-3rem)] -m-6">
@@ -146,7 +176,50 @@ export default function UploadsPage() {
           </div>
         </div>
 
-        {uploads.length === 0 ? (
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-3 mb-6">
+          <div className="relative flex-1 min-w-[220px]">
+            <Search className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/60" />
+            <Input
+              placeholder="Search uploads by title or user..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 h-9 bg-muted/30 border-transparent focus:border-primary/40"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <X className="size-3.5" />
+              </button>
+            )}
+          </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="h-9 rounded-md border border-border bg-background px-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/30"
+          >
+            <option value="all">All Statuses</option>
+            <option value="done">Done</option>
+            <option value="analyzing">Analyzing</option>
+            <option value="parsing">Parsing</option>
+            <option value="error">Error</option>
+            <option value="failed">Failed</option>
+          </select>
+          <select
+            value={sortOrder}
+            onChange={(e) => setSortOrder(e.target.value)}
+            className="h-9 rounded-md border border-border bg-background px-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/30"
+          >
+            <option value="date-desc">Newest First</option>
+            <option value="date-asc">Oldest First</option>
+            <option value="entries-desc">Most Entries</option>
+            <option value="name-asc">Name (A-Z)</option>
+          </select>
+        </div>
+
+        {filteredUploads.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card py-20 text-center">
             <FileSpreadsheet className="size-12 text-muted-foreground/50 mb-4" />
             <h3 className="text-lg font-semibold">No uploads yet</h3>
@@ -163,7 +236,7 @@ export default function UploadsPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {uploads.map((upload) => {
+            {filteredUploads.map((upload) => {
               const sev = severityBadge(upload.avgSeverity);
               const st = statusLabel(upload.status);
               return (
