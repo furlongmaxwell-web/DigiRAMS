@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronRight, FileSpreadsheet, PlusCircle } from "lucide-react";
+import { ChevronRight, FileSpreadsheet, PlusCircle, ScrollText } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -81,6 +81,7 @@ export default function UploadsPage() {
   const router = useRouter();
   const [uploads, setUploads] = useState<UploadData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     fetch("/api/uploads")
@@ -88,6 +89,16 @@ export default function UploadsPage() {
       .then((data) => setUploads(data))
       .catch(() => setUploads([]))
       .finally(() => setLoading(false));
+
+    // Check if current user is admin
+    fetch("/api/auth/session")
+      .then((r) => r.json())
+      .then((session) => {
+        if (session?.user?.role?.toUpperCase() === "ADMIN") {
+          setIsAdmin(true);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   if (loading) {
@@ -112,13 +123,25 @@ export default function UploadsPage() {
               {uploads.length} dataset{uploads.length !== 1 ? "s" : ""} uploaded
             </p>
           </div>
-          <Button
-            render={<Link href="/dashboard/uploads/new" />}
-            className="gap-1.5"
-          >
-            <PlusCircle className="size-4" />
-            New Upload
-          </Button>
+          <div className="flex items-center gap-2">
+            {isAdmin && (
+              <Button
+                variant="outline"
+                render={<Link href="/dashboard/audit-logs" />}
+                className="gap-1.5"
+              >
+                <ScrollText className="size-4" />
+                Audit Logs
+              </Button>
+            )}
+            <Button
+              render={<Link href="/dashboard/uploads/new" />}
+              className="gap-1.5"
+            >
+              <PlusCircle className="size-4" />
+              New Upload
+            </Button>
+          </div>
         </div>
 
         {uploads.length === 0 ? (

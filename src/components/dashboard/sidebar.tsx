@@ -6,6 +6,7 @@ import {
   FileSpreadsheet,
   LayoutDashboard,
   PlusCircle,
+  ScrollText,
   Settings,
   Shield,
   Upload,
@@ -22,6 +23,7 @@ const adminLinks = [
   { href: "/dashboard/admin", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/admin/volunteers", label: "Volunteers", icon: Users },
   { href: "/dashboard/uploads", label: "Uploads", icon: FileSpreadsheet },
+  { href: "/dashboard/audit-logs", label: "Audit Logs", icon: ScrollText },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { hashSync } from "bcryptjs";
+import { logAudit, diffChanges } from "@/lib/audit";
 
 export async function PATCH(
   req: NextRequest,
@@ -16,6 +17,12 @@ export async function PATCH(
   const body = await req.json();
   const { name, email, password, skills, region, availability } = body;
 
+  // Capture old values for diff
+  const oldUser = await prisma.user.findUnique({
+    where: { id },
+    select: { name: true, email: true, skills: true, region: true, availability: true },
+  });
+
   const updateData: Record<string, unknown> = {};
   if (name !== undefined) updateData.name = name;
   if (email !== undefined) updateData.email = email;
@@ -28,6 +35,35 @@ export async function PATCH(
     where: { id },
     data: updateData,
   });
+
+  // Log UPDATE audit event with diff
+  if (oldUser) {
+    const oldData: Record<string, unknown> = {
+      name: oldUser.name,
+      email: oldUser.email,
+      skills: oldUser.skills,
+      region: oldUser.region,
+      availability: oldUser.availability,
+    };
+    const newData: Record<string, unknown> = {
+      name: user.name,
+      email: user.email,
+      skills: user.skills,
+      region: user.region,
+      availability: user.availability,
+    };
+    const diff = diffChanges(oldData, newData);
+    if (diff.changed) {
+      logAudit({
+        userId: session.user.id,
+        action: "UPDATE",
+        entityType: "User",
+        entityId: id,
+        entityTitle: user.name,
+        details: diff.changes,
+      });
+    }
+  }
 
   return NextResponse.json({
     id: user.id,
@@ -49,6 +85,24 @@ export async function DELETE(
   }
 
   const { id } = await params;
+
+  // Capture name before deletion
+  const user = await prisma.user.findUnique({
+    where: { id },
+    select: { name: true, email: true },
+  });
+
   await prisma.user.delete({ where: { id } });
+
+  // Log DELETE audit event
+  logAudit({
+    userId: session.user.id,
+    action: "DELETE",
+    entityType: "User",
+    entityId: id,
+    entityTitle: user?.name ?? "Unknown",
+    details: { email: user?.email },
+  });
+
   return NextResponse.json({ success: true });
 }

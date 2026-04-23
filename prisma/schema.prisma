@@ -22,6 +22,7 @@ model User {
   region       String?
   availability Boolean  @default(true)
   uploads      Upload[]
+  auditLogs    AuditLog[]
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
@@ -76,4 +77,23 @@ model SurveyEntry {
   @@index([severityLevel])
   @@index([status])
   @@map("survey_entries")
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id])
+  action      String   // CREATE, READ, UPDATE, DELETE
+  entityType  String   @map("entity_type")  // Upload, SurveyEntry, User
+  entityId    String   @map("entity_id")
+  entityTitle String?  @map("entity_title")
+  details     String   @default("{}") // JSON: { old, new, changes }
+  ipAddress   String?  @map("ip_address")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([action])
+  @@index([entityType])
+  @@index([createdAt])
+  @@map("audit_logs")
 }

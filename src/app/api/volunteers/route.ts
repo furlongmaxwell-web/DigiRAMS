@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { hashSync } from "bcryptjs";
+import { logAudit } from "@/lib/audit";
 
 export async function GET() {
   const session = await auth();
@@ -71,6 +72,16 @@ export async function POST(req: NextRequest) {
       skills: JSON.stringify(skills || []),
       region: region || null,
     },
+  });
+
+  // Log CREATE audit event
+  logAudit({
+    userId: session.user.id,
+    action: "CREATE",
+    entityType: "User",
+    entityId: user.id,
+    entityTitle: user.name,
+    details: { email: user.email, role: "VOLUNTEER", region: user.region },
   });
 
   return NextResponse.json({

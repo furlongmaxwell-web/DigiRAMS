@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { parseSpreadsheet } from "@/lib/spreadsheet-parser";
 import { analyzeUpload } from "@/lib/ai-analyzer";
+import { logAudit } from "@/lib/audit";
 
 export async function GET() {
   const session = await auth();
@@ -100,6 +101,16 @@ export async function POST(req: NextRequest) {
     await prisma.upload.update({
       where: { id: upload.id },
       data: { status: "analyzing" },
+    });
+
+    // Log CREATE audit event
+    logAudit({
+      userId: session.user.id,
+      action: "CREATE",
+      entityType: "Upload",
+      entityId: upload.id,
+      entityTitle: title,
+      details: { fileName: file.name, totalEntries: rows.length, headers },
     });
 
     analyzeUpload(upload.id).catch((err) =>
