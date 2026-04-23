@@ -23,15 +23,6 @@ export async function GET(
     return NextResponse.json({ error: "Upload not found" }, { status: 404 });
   }
 
-  // Log READ audit event (admin opened/viewed an upload)
-  logAudit({
-    userId: session.user.id,
-    action: "READ",
-    entityType: "Upload",
-    entityId: upload.id,
-    entityTitle: upload.title,
-  });
-
   return NextResponse.json({
     id: upload.id,
     title: upload.title,

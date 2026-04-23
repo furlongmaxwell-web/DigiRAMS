@@ -13,18 +13,18 @@ enum Role {
 }
 
 model User {
-  id           String   @id @default(cuid())
+  id           String     @id @default(cuid())
   name         String
-  email        String   @unique
+  email        String     @unique
   password     String
-  role         Role     @default(VOLUNTEER)
-  skills       String   @default("[]")
+  role         Role       @default(VOLUNTEER)
+  skills       String     @default("[]")
   region       String?
-  availability Boolean  @default(true)
+  availability Boolean    @default(true)
   uploads      Upload[]
   auditLogs    AuditLog[]
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
 
   @@map("users")
 }
@@ -83,8 +83,8 @@ model AuditLog {
   id          String   @id @default(cuid())
   userId      String   @map("user_id")
   user        User     @relation(fields: [userId], references: [id])
-  action      String   // CREATE, READ, UPDATE, DELETE
-  entityType  String   @map("entity_type")  // Upload, SurveyEntry, User
+  action      String // CREATE, READ, UPDATE, DELETE
+  entityType  String   @map("entity_type") // Upload, SurveyEntry, User
   entityId    String   @map("entity_id")
   entityTitle String?  @map("entity_title")
   details     String   @default("{}") // JSON: { old, new, changes }
