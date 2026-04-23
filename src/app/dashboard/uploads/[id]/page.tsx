@@ -330,6 +330,7 @@ export default function UploadDetailPage() {
   const [reasonLoading, setReasonLoading] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [columnFilters, setColumnFilters] = useState<ColumnFilter[]>([]);
+  const [entriesVersion, setEntriesVersion] = useState(0);
 
   /* ---------- data fetching ---------- */
 
@@ -352,6 +353,7 @@ export default function UploadDetailPage() {
             if (u.status !== "analyzing") {
               clearInterval(pollRef.current!);
               pollRef.current = null;
+              setEntriesVersion((v) => v + 1);
             }
           }, 3000);
         }
@@ -367,6 +369,7 @@ export default function UploadDetailPage() {
   useEffect(() => {
     const fetchId = ++entriesFetchId.current;
     const ctrl = new AbortController();
+    setEntriesLoading(true);
     fetch(`/api/uploads/${id}/entries?page=${page}&limit=${LIMIT}`, {
       signal: ctrl.signal,
     })
@@ -381,7 +384,7 @@ export default function UploadDetailPage() {
         if (entriesFetchId.current === fetchId) setEntriesLoading(false);
       });
     return () => ctrl.abort();
-  }, [id, page]);
+  }, [id, page, entriesVersion]);
 
   const selectedEntryId = selectedEntry?.id;
   const selectedSeverity = selectedEntry?.severityLevel;

@@ -2,6 +2,7 @@ import * as XLSX from "xlsx";
 import { parseCSV } from "./csv-parser";
 import type { HeaderSchema } from "@/types";
 import { normalizeKey } from "./csv-parser";
+import { sanitizeCell } from "./sanitize";
 
 function inferType(values: string[]): HeaderSchema["type"] {
   const sample = values.filter((v) => v !== "" && v != null).slice(0, 10);
@@ -43,7 +44,7 @@ export function parseXLSX(buffer: ArrayBuffer): {
   const rows = rawData.map((row) => {
     const normalized: Record<string, string> = {};
     rawHeaders.forEach((rawHeader, idx) => {
-      normalized[headers[idx].key] = String(row[rawHeader] ?? "");
+      normalized[headers[idx].key] = sanitizeCell(row[rawHeader] ?? "");
     });
     return normalized;
   });

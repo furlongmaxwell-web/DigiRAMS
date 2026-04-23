@@ -1,65 +1,89 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { Skeleton } from "@/components/ui/skeleton";
 import {
-  FileSpreadsheet,
-  Database,
+  Activity,
+  CheckCircle2,
   ChevronRight,
   Clock,
-  CheckCircle2,
+  Database,
+  FileSpreadsheet,
+  PlusCircle,
   ShieldAlert,
   Upload,
-  PlusCircle,
-  BarChart3,
-} from "lucide-react"
-import { Skeleton } from "@/components/ui/skeleton"
+} from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 interface UploadItem {
-  id: string
-  title: string
-  totalEntries: number
-  criticalCount: number
-  avgSeverity: number | null
-  aiSummary: string | null
-  status: string
-  createdAt: string
-  uploadedByName: string
+  id: string;
+  title: string;
+  totalEntries: number;
+  criticalCount: number;
+  avgSeverity: number | null;
+  aiSummary: string | null;
+  status: string;
+  createdAt: string;
+  uploadedByName: string;
 }
 
 interface Stats {
-  totalUploads: number
-  totalEntries: number
-  criticalCount: number
-  resolvedCount: number
-  pendingCount: number
-  noActionCount: number
-  severityDistribution: { level: number; label: string; count: number }[]
-  regionData: { name: string; count: number }[]
-  uploads: UploadItem[]
+  totalUploads: number;
+  totalEntries: number;
+  criticalCount: number;
+  resolvedCount: number;
+  pendingCount: number;
+  noActionCount: number;
+  severityDistribution: { level: number; label: string; count: number }[];
+  regionData: { name: string; count: number }[];
+  uploads: UploadItem[];
 }
 
 function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 60) return `${mins}m ago`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs}h ago`
-  const days = Math.floor(hrs / 24)
-  if (days < 30) return `${days}d ago`
-  return `${Math.floor(days / 30)}mo ago`
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  return `${Math.floor(days / 30)}mo ago`;
 }
 
 function severityColor(level: number): string {
-  return ["bg-emerald-500", "bg-lime-500", "bg-amber-500", "bg-orange-500", "bg-red-500"][level - 1] ?? "bg-muted"
+  return (
+    [
+      "bg-emerald-500",
+      "bg-lime-500",
+      "bg-amber-500",
+      "bg-orange-500",
+      "bg-red-500",
+    ][level - 1] ?? "bg-muted"
+  );
 }
 
 function severityBadge(avg: number | null): { text: string; cls: string } {
-  if (avg === null) return { text: "N/A", cls: "bg-muted text-muted-foreground" }
-  if (avg >= 4) return { text: "Critical", cls: "bg-red-500/15 text-red-500 border border-red-500/25" }
-  if (avg >= 3) return { text: "High", cls: "bg-orange-500/15 text-orange-500 border border-orange-500/25" }
-  if (avg >= 2) return { text: "Medium", cls: "bg-amber-500/15 text-amber-500 border border-amber-500/25" }
-  return { text: "Low", cls: "bg-emerald-500/15 text-emerald-500 border border-emerald-500/25" }
+  if (avg === null)
+    return { text: "N/A", cls: "bg-muted text-muted-foreground" };
+  if (avg >= 4)
+    return {
+      text: "Critical",
+      cls: "bg-red-500/15 text-red-500 border border-red-500/25",
+    };
+  if (avg >= 3)
+    return {
+      text: "High",
+      cls: "bg-orange-500/15 text-orange-500 border border-orange-500/25",
+    };
+  if (avg >= 2)
+    return {
+      text: "Medium",
+      cls: "bg-amber-500/15 text-amber-500 border border-amber-500/25",
+    };
+  return {
+    text: "Low",
+    cls: "bg-emerald-500/15 text-emerald-500 border border-emerald-500/25",
+  };
 }
 
 function DashboardSkeleton() {
@@ -77,32 +101,38 @@ function DashboardSkeleton() {
         ))}
       </div>
     </div>
-  )
+  );
 }
 
 interface Props {
-  userName: string
+  userName: string;
 }
 
 export function VolunteerDashboard({ userName }: Props) {
-  const router = useRouter()
-  const [stats, setStats] = useState<Stats | null>(null)
-  const [loading, setLoading] = useState(true)
+  const router = useRouter();
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch("/api/stats?scope=me")
       .then((res) => res.json())
       .then((data: Stats) => {
-        setStats(data)
-        setLoading(false)
+        setStats(data);
+        setLoading(false);
       })
-      .catch(() => setLoading(false))
-  }, [])
+      .catch(() => setLoading(false));
+  }, []);
 
-  if (loading || !stats) return <DashboardSkeleton />
+  if (loading || !stats) return <DashboardSkeleton />;
 
-  const maxSeverity = Math.max(...stats.severityDistribution.map((s) => s.count), 1)
-  const resolvedPct = stats.totalEntries > 0 ? Math.round((stats.resolvedCount / stats.totalEntries) * 100) : 0
+  const maxSeverity = Math.max(
+    ...stats.severityDistribution.map((s) => s.count),
+    1,
+  );
+  const resolvedPct =
+    stats.totalEntries > 0
+      ? Math.round((stats.resolvedCount / stats.totalEntries) * 100)
+      : 0;
 
   return (
     <div className="flex min-h-[calc(100vh-57px-3rem)] -m-6">
@@ -118,13 +148,12 @@ export function VolunteerDashboard({ userName }: Props) {
         </div>
 
         <div className="grid h-[calc(100%-4rem)] grid-cols-3 gap-5">
-
           {/* Card 1: My Severity Data */}
           <div className="flex flex-col rounded-[1.5rem] border-2 border-primary/60 bg-card overflow-hidden">
             <div className="bg-primary px-6 py-5">
               <div className="flex items-center gap-3">
-                <ShieldAlert className="size-6 text-primary-foreground" />
-                <h2 className="text-xl font-extrabold text-primary-foreground">
+                <ShieldAlert className="size-6 text-foreground" />
+                <h2 className="text-xl font-extrabold text-foreground">
                   My Severity Data
                 </h2>
               </div>
@@ -154,11 +183,14 @@ export function VolunteerDashboard({ userName }: Props) {
                   Distribution
                 </p>
                 {stats.severityDistribution.map((s) => {
-                  const pct = maxSeverity > 0 ? (s.count / maxSeverity) * 100 : 0
+                  const pct =
+                    maxSeverity > 0 ? (s.count / maxSeverity) * 100 : 0;
                   return (
                     <div key={s.level}>
                       <div className="flex items-center justify-between text-[12px] mb-1.5">
-                        <span className="font-semibold text-foreground">{s.label}</span>
+                        <span className="font-semibold text-foreground">
+                          {s.label}
+                        </span>
                         <span className="font-bold tabular-nums text-muted-foreground">
                           {s.count}
                         </span>
@@ -170,17 +202,17 @@ export function VolunteerDashboard({ userName }: Props) {
                         />
                       </div>
                     </div>
-                  )
+                  );
                 })}
               </div>
             </div>
           </div>
 
           {/* Card 2: My Analytics */}
-          <div className="flex flex-col rounded-[1.5rem] border border-border bg-card overflow-hidden">
-            <div className="px-6 py-5">
+          <div className="flex flex-col rounded-[1.5rem] border-2 border-cyan-800/60 bg-card overflow-hidden min-h-0">
+            <div className="bg-cyan-800 px-6 py-5 shrink-0">
               <div className="flex items-center gap-3">
-                <BarChart3 className="size-6 text-foreground" />
+                <Activity className="size-6 text-foreground" />
                 <h2 className="text-xl font-extrabold text-foreground">
                   My Analytics
                 </h2>
@@ -195,7 +227,9 @@ export function VolunteerDashboard({ userName }: Props) {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <CheckCircle2 className="size-4 text-emerald-500" />
-                      <span className="text-[13px] font-medium text-foreground">Resolved</span>
+                      <span className="text-[13px] font-medium text-foreground">
+                        Resolved
+                      </span>
                     </div>
                     <span className="text-[15px] font-bold tabular-nums text-emerald-500">
                       {stats.resolvedCount}
@@ -204,7 +238,9 @@ export function VolunteerDashboard({ userName }: Props) {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Clock className="size-4 text-amber-500" />
-                      <span className="text-[13px] font-medium text-foreground">Pending</span>
+                      <span className="text-[13px] font-medium text-foreground">
+                        Pending
+                      </span>
                     </div>
                     <span className="text-[15px] font-bold tabular-nums text-amber-500">
                       {stats.pendingCount}
@@ -213,7 +249,9 @@ export function VolunteerDashboard({ userName }: Props) {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Database className="size-4 text-muted-foreground" />
-                      <span className="text-[13px] font-medium text-foreground">No Action</span>
+                      <span className="text-[13px] font-medium text-foreground">
+                        No Action
+                      </span>
                     </div>
                     <span className="text-[15px] font-bold tabular-nums text-muted-foreground">
                       {stats.noActionCount}
@@ -250,7 +288,9 @@ export function VolunteerDashboard({ userName }: Props) {
               {/* Resolution rate */}
               <div className="rounded-xl bg-emerald-500/8 border border-emerald-500/15 p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-[13px] font-bold text-foreground">My Resolution Rate</p>
+                  <p className="text-[13px] font-bold text-foreground">
+                    My Resolution Rate
+                  </p>
                   <span className="text-xl font-black tabular-nums text-emerald-500">
                     {resolvedPct}%
                   </span>
@@ -299,11 +339,13 @@ export function VolunteerDashboard({ userName }: Props) {
                 </p>
                 <div className="space-y-2 max-h-[280px] overflow-y-auto">
                   {stats.uploads.slice(0, 5).map((u) => {
-                    const sev = severityBadge(u.avgSeverity)
+                    const sev = severityBadge(u.avgSeverity);
                     return (
                       <button
                         key={u.id}
-                        onClick={() => router.push(`/dashboard/uploads/${u.id}`)}
+                        onClick={() =>
+                          router.push(`/dashboard/uploads/${u.id}`)
+                        }
                         className="w-full flex items-center gap-3 rounded-lg bg-muted/30 px-3 py-2.5 text-left transition-colors hover:bg-muted/60 group"
                       >
                         <div className="flex-1 min-w-0">
@@ -311,14 +353,17 @@ export function VolunteerDashboard({ userName }: Props) {
                             {u.title}
                           </p>
                           <p className="text-[11px] text-muted-foreground">
-                            {u.totalEntries} entries &middot; {timeAgo(u.createdAt)}
+                            {u.totalEntries} entries &middot;{" "}
+                            {timeAgo(u.createdAt)}
                           </p>
                         </div>
-                        <span className={`text-[10px] font-bold px-2 py-1 rounded-lg shrink-0 ${sev.cls}`}>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-1 rounded-lg shrink-0 ${sev.cls}`}
+                        >
                           {sev.text}
                         </span>
                       </button>
-                    )
+                    );
                   })}
                   {stats.uploads.length === 0 && (
                     <p className="text-[12px] text-muted-foreground italic py-4 text-center">
@@ -342,7 +387,9 @@ export function VolunteerDashboard({ userName }: Props) {
               <div className="flex size-14 items-center justify-center rounded-2xl bg-muted/60 mb-3">
                 <FileSpreadsheet className="size-6 text-muted-foreground/50" />
               </div>
-              <p className="text-sm font-semibold text-foreground">No uploads yet</p>
+              <p className="text-sm font-semibold text-foreground">
+                No uploads yet
+              </p>
               <p className="text-xs text-muted-foreground mt-1">
                 Upload a dataset to see your data here
               </p>
@@ -350,7 +397,7 @@ export function VolunteerDashboard({ userName }: Props) {
           )}
 
           {stats.uploads.map((upload) => {
-            const sev = severityBadge(upload.avgSeverity)
+            const sev = severityBadge(upload.avgSeverity);
             return (
               <button
                 key={upload.id}
@@ -370,10 +417,18 @@ export function VolunteerDashboard({ userName }: Props) {
                   <span className="text-[12px] text-muted-foreground">
                     {upload.totalEntries} entries
                     {upload.criticalCount > 0 && (
-                      <> &middot; <span className="text-red-500 font-semibold">{upload.criticalCount} critical</span></>
+                      <>
+                        {" "}
+                        &middot;{" "}
+                        <span className="text-red-500 font-semibold">
+                          {upload.criticalCount} critical
+                        </span>
+                      </>
                     )}
                   </span>
-                  <span className={`text-[10px] font-bold px-2.5 py-1 rounded-lg ${sev.cls}`}>
+                  <span
+                    className={`text-[10px] font-bold px-2.5 py-1 rounded-lg ${sev.cls}`}
+                  >
                     {sev.text}
                   </span>
                 </div>
@@ -385,10 +440,10 @@ export function VolunteerDashboard({ userName }: Props) {
                   <ChevronRight className="size-4 text-muted-foreground/30 transition-transform group-hover:translate-x-0.5 group-hover:text-muted-foreground" />
                 </div>
               </button>
-            )
+            );
           })}
         </div>
       </aside>
     </div>
-  )
+  );
 }

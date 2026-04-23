@@ -1,20 +1,19 @@
 "use client";
 
-import { usePathname } from "next/navigation";
-import { signOut } from "next-auth/react";
-import { LogOut, ChevronDown } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
-  DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Badge } from "@/components/ui/badge";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { ChevronDown, LogOut } from "lucide-react";
+import { signOut } from "next-auth/react";
 
 interface HeaderProps {
   user: { name: string; email: string; role: string };
@@ -30,22 +29,22 @@ const pageTitles: Record<string, string> = {
 };
 
 export function Header({ user }: HeaderProps) {
-  const pathname = usePathname();
+  // const pathname = usePathname();
 
-  const title =
-    pageTitles[pathname] ??
-    pathname
-      .split("/")
-      .pop()
-      ?.replace(/-/g, " ")
-      .replace(/\b\w/g, (c) => c.toUpperCase()) ??
-    "Dashboard";
+  // const title =
+  //   pageTitles[pathname] ??
+  //   pathname
+  //     .split("/")
+  //     .pop()
+  //     ?.replace(/-/g, " ")
+  //     .replace(/\b\w/g, (c) => c.toUpperCase()) ??
+  //   "Dashboard";
 
   return (
-    <header className="flex items-center justify-between border-b border-border bg-card/60 backdrop-blur-md px-6 py-3">
-      <h1 className="text-[15px] font-bold tracking-tight text-foreground">
+    <header className="flex items-center justify-end border-b border-border bg-card/60 backdrop-blur-md px-6 py-3">
+      {/* <h1 className="text-[15px] font-bold tracking-tight text-foreground">
         {title}
-      </h1>
+      </h1> */}
 
       <div className="flex items-center gap-2">
         <ThemeToggle />
@@ -70,7 +69,9 @@ export function Header({ user }: HeaderProps) {
             <DropdownMenuGroup>
               <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col gap-1">
-                  <p className="text-sm font-semibold leading-none">{user.name}</p>
+                  <p className="text-sm font-semibold leading-none">
+                    {user.name}
+                  </p>
                   <p className="text-xs text-muted-foreground">{user.email}</p>
                   <Badge
                     variant="outline"
@@ -83,7 +84,7 @@ export function Header({ user }: HeaderProps) {
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              onSelect={async (e) => {
+              onClick={async (e: React.MouseEvent<HTMLDivElement>) => {
                 e.preventDefault();
                 await signOut({ redirect: false });
                 window.location.href = "/";

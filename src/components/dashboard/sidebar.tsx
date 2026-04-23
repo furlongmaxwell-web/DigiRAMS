@@ -36,14 +36,13 @@ export function Sidebar({ user }: SidebarProps) {
   const isAdmin = user.role?.toUpperCase() === "ADMIN";
   const links = isAdmin ? adminLinks : volunteerLinks;
 
-  const activeHref = links
-    .filter(
-      (l) => pathname === l.href || pathname.startsWith(l.href + "/"),
-    )
-    .sort((a, b) => b.href.length - a.href.length)[0]?.href ?? null;
+  const activeHref =
+    links
+      .filter((l) => pathname === l.href || pathname.startsWith(l.href + "/"))
+      .sort((a, b) => b.href.length - a.href.length)[0]?.href ?? null;
 
   return (
-    <aside className="flex w-[260px] flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
+    <aside className="flex w-[260px] flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground ">
       {/* Brand */}
       <div className="flex items-center gap-3 border-b border-sidebar-border px-5 py-4">
         <div className="flex size-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shadow-sm shadow-sidebar-primary/20">
@@ -51,10 +50,10 @@ export function Sidebar({ user }: SidebarProps) {
         </div>
         <div>
           <h2 className="text-sm font-bold tracking-tight text-sidebar-foreground">
-            SRA Platform
+            Digi-SRA Platform
           </h2>
           <p className="text-[11px] font-medium text-sidebar-foreground/50">
-            Taskforce 141
+            by Taskforce 141
           </p>
         </div>
       </div>

@@ -2,6 +2,7 @@ import { generateText } from "ai";
 import { prisma } from "./prisma";
 import { deepseek } from "./ai";
 import { SeverityLevel, Status } from "@/generated/prisma/client";
+import { sanitizeRow } from "./sanitize";
 
 const BATCH_SIZE = 30;
 const MAX_CONCURRENT = 5;
@@ -149,7 +150,11 @@ export async function analyzeUpload(uploadId: string): Promise<void> {
       batches.push({
         index: i,
         entries: slice,
-        batchData: slice.map((e) => ({ id: e.id, ...JSON.parse(e.rawData) })),
+        batchData: slice.map((e) => {
+          const parsed = JSON.parse(e.rawData);
+          const safe = sanitizeRow(parsed);
+          return { id: e.id, ...safe };
+        }),
       });
     }
 

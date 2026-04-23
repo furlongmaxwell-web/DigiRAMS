@@ -1,5 +1,6 @@
 import Papa from "papaparse";
 import type { HeaderSchema } from "@/types";
+import { sanitizeCell } from "./sanitize";
 
 export function normalizeKey(header: string): string {
   return header
@@ -57,7 +58,7 @@ export function parseCSV(fileContent: string): {
   const rows = data.map((row) => {
     const normalized: Record<string, string> = {};
     rawHeaders.forEach((rawHeader, idx) => {
-      normalized[headers[idx].key] = row[rawHeader] ?? "";
+      normalized[headers[idx].key] = sanitizeCell(row[rawHeader] ?? "");
     });
     return normalized;
   });

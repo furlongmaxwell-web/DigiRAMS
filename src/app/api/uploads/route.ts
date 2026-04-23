@@ -3,6 +3,11 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { parseSpreadsheet } from "@/lib/spreadsheet-parser";
 import { analyzeUpload } from "@/lib/ai-analyzer";
+import {
+  validateUploadedFile,
+  validateDataLimits,
+  sanitizeTitle,
+} from "@/lib/sanitize";
 
 export async function GET() {
   const session = await auth();
@@ -44,24 +49,35 @@ export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
-    const title = formData.get("title") as string | null;
+    const rawTitle = formData.get("title") as string | null;
 
-    if (!file || !title) {
+    if (!file || !rawTitle) {
       return NextResponse.json(
         { error: "File and title are required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    const ext = file.name.split(".").pop()?.toLowerCase();
-    if (!ext || !["csv", "xlsx", "xls"].includes(ext)) {
+    const title = sanitizeTitle(rawTitle);
+    if (!title) {
       return NextResponse.json(
-        { error: "Unsupported file type. Please upload a .csv or .xlsx file." },
-        { status: 400 }
+        { error: "Title cannot be empty after sanitization." },
+        { status: 400 },
       );
     }
 
     const buffer = await file.arrayBuffer();
+
+    const fileCheck = validateUploadedFile({
+      name: file.name,
+      size: file.size,
+      buffer,
+    });
+    if (!fileCheck.valid) {
+      return NextResponse.json({ error: fileCheck.error }, { status: 400 });
+    }
+
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
     const text = ext === "csv" ? new TextDecoder().decode(buffer) : "";
     const { headers, rows } = parseSpreadsheet({
       name: file.name,
@@ -72,8 +88,13 @@ export async function POST(req: NextRequest) {
     if (rows.length === 0) {
       return NextResponse.json(
         { error: "File is empty or could not be parsed" },
-        { status: 400 }
+        { status: 400 },
       );
+    }
+
+    const limitsCheck = validateDataLimits(rows, headers.length);
+    if (!limitsCheck.valid) {
+      return NextResponse.json({ error: limitsCheck.error }, { status: 400 });
     }
 
     const upload = await prisma.upload.create({
@@ -103,7 +124,7 @@ export async function POST(req: NextRequest) {
     });
 
     analyzeUpload(upload.id).catch((err) =>
-      console.error("Background analysis failed:", err)
+      console.error("Background analysis failed:", err),
     );
 
     return NextResponse.json({
@@ -115,7 +136,7 @@ export async function POST(req: NextRequest) {
     console.error("Upload failed:", error);
     return NextResponse.json(
       { error: "Failed to process upload" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
